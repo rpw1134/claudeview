@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen, History, Loader2, Plus } from 'lucide-react'
+import { FolderOpen, History, Loader2, Plus, SquareTerminal } from 'lucide-react'
 import type { SessionSummary } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { Button } from './ui/Button'
@@ -25,9 +25,11 @@ import { shortenPath, timeAgo } from '@/lib/utils'
 export function NewSessionPanel({
   home,
   onStart,
+  onStartTerminal,
 }: {
   home?: string
   onStart: (options: { cwd?: string; resume?: string; title?: string }) => void
+  onStartTerminal: (cwd?: string) => void
 }) {
   const [cwd, setCwd] = useState<string | undefined>(undefined)
   const [scope, setScope] = useState<'all' | 'cwd'>('all')
@@ -64,7 +66,10 @@ export function NewSessionPanel({
       <div className="w-full max-w-xl">
         <h1 className="text-xl font-semibold tracking-tight text-text">Start a session</h1>
         <p className="mt-2 text-sm text-text-muted">
-          Claude Code runs as a managed subprocess. Its output streams here.
+          Open sessions and terminals side by side — up to eight panels.
+        </p>
+        <p className="mt-1 text-xs text-text-faint">
+          One message bar at the bottom sends to whichever panel is focused.
         </p>
 
         <div className="mt-8 rounded-xl border border-line bg-surface p-4">
@@ -87,15 +92,17 @@ export function NewSessionPanel({
             </div>
           </Field>
 
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => onStart({ cwd })}
-            className="mt-4 w-full"
-          >
-            <Plus size={16} />
-            New session
-          </Button>
+          <div className="mt-4 flex gap-2">
+            <Button variant="primary" size="lg" onClick={() => onStart({ cwd })} className="flex-1">
+              <Plus size={16} />
+              New session
+            </Button>
+            {/* Secondary, not primary: a terminal is the supporting act here. */}
+            <Button variant="outline" size="lg" onClick={() => onStartTerminal(cwd)}>
+              <SquareTerminal size={15} />
+              Terminal
+            </Button>
+          </div>
         </div>
 
         <section className="mt-10">

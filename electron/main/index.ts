@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SessionManager } from './session/SessionManager'
+import { TerminalManager } from './terminal/TerminalManager'
 import { registerIpc, unregisterIpc } from './ipc/register'
 
 // The main bundle is ESM, so __dirname does not exist. Derive it.
@@ -13,6 +14,7 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
 let window: BrowserWindow | null = null
 const sessions = new SessionManager(() => window?.webContents ?? null)
+const terminals = new TerminalManager(() => window?.webContents ?? null)
 
 function createWindow(): void {
   window = new BrowserWindow({
@@ -59,6 +61,7 @@ function createWindow(): void {
     // while the app keeps running, and every live session is a subprocess we would
     // otherwise strand with no UI left to manage it.
     void sessions.disposeAll()
+    terminals.disposeAll()
   })
 
   if (DEV_SERVER_URL) {
@@ -85,7 +88,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(() => {
-    registerIpc(sessions, () => window)
+    registerIpc(sessions, terminals, () => window)
     createWindow()
 
     app.on('activate', () => {
@@ -105,9 +108,10 @@ app.on('window-all-closed', () => {
  */
 let shuttingDown = false
 app.on('before-quit', (event) => {
-  if (shuttingDown || sessions.size === 0) return
+  if (shuttingDown || (sessions.size === 0 && terminals.size === 0)) return
   event.preventDefault()
   shuttingDown = true
+  terminals.disposeAll()
   void sessions.disposeAll().finally(() => {
     unregisterIpc()
     app.quit()

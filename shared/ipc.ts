@@ -208,11 +208,30 @@ export type IpcCalls = {
   'session:close': [{ tabId: string }, void]
   'sessions:list': [{ cwd?: string; limit?: number }, SessionSummary[]]
   'app:pick-directory': [void, string | null]
+
+  'terminal:create': [{ id: string; cwd?: string; cols?: number; rows?: number }, void]
+  'terminal:write': [{ id: string; data: string }, void]
+  'terminal:resize': [{ id: string; cols: number; rows: number }, void]
+  'terminal:close': [{ id: string }, void]
+  /** Retained output, replayed when a panel remounts after a layout change. */
+  'terminal:scrollback': [{ id: string }, string]
   'app:info': [void, { cwd: string; version: string; home: string }]
 }
 
-/** Channel for main -> renderer stream pushes. */
+/** Channel for main -> renderer session stream pushes. */
 export const STREAM_CHANNEL = 'session:event' as const
+
+/** Channel for main -> renderer terminal output. */
+export const TERMINAL_CHANNEL = 'terminal:event' as const
+
+/**
+ * Terminal output and lifecycle. Carries the same monotonic `seq` as session
+ * envelopes, for the same reason: duplicate delivery must not double the output.
+ */
+export type TerminalEnvelope = { seq: number } & (
+  | { kind: 'data'; id: string; data: string }
+  | { kind: 'exit'; id: string; exitCode: number }
+)
 
 /** The shape exposed on `window.claudeview` by the preload script. */
 export type Api = {
@@ -225,4 +244,6 @@ export type Api = {
    * invoke it on teardown or the listener leaks for the lifetime of the window.
    */
   onStreamEvent: (handler: (envelope: StreamEnvelope) => void) => () => void
+  /** Same contract as `onStreamEvent`: the returned function MUST be called. */
+  onTerminalEvent: (handler: (envelope: TerminalEnvelope) => void) => () => void
 }

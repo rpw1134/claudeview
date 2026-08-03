@@ -17,8 +17,12 @@ for the job.
 - **Smooth streaming.** Token arrival is decoupled from token display, so bursty
   output reads as steady prose instead of lurching. See
   [docs/streaming.md](docs/streaming.md).
-- **Tabs.** Multiple concurrent sessions, each with its own working directory,
-  status, and cost. `⌘T` / `⌘W` / `⌘1-9`.
+- **Panels.** Up to 8 side-by-side panels in one window, each a Claude session or a
+  real terminal, with layout presets from single up to an 4x2 grid. One message bar
+  at the bottom targets whichever panel is focused. See
+  [panels-and-terminals.md](docs/panels-and-terminals.md).
+- **Real terminals.** `node-pty` + `xterm.js`, so `vim`, colour, and job control all
+  work — not a stdout pipe.
 - **Subagent views.** Subagents get their own transcript lanes instead of being
   interleaved into one unreadable stream.
 - **Resume anything.** Sessions started here *or in the terminal* are listed and
@@ -36,6 +40,8 @@ for the job.
 - Node.js 20+ (developed on 24)
 - An authenticated Claude Code CLI — run `claude` once and log in. ClaudeView uses
   the same credentials and the same `~/.claude` settings, `CLAUDE.md`, and skills.
+- A toolchain able to build native modules (`node-pty`). `npm install` rebuilds it
+  for Electron automatically via `postinstall`; re-run with `npm run rebuild:native`.
 - macOS, Linux, or Windows (developed and verified on macOS)
 
 ## Getting started
@@ -98,6 +104,7 @@ a thousand-message transcript rendering as smoothly as an empty one.
 | [ipc-contract.md](docs/ipc-contract.md) | Channels, event union, adding an event |
 | [lifecycle-and-cleanup.md](docs/lifecycle-and-cleanup.md) | Every teardown path and why it exists |
 | [design-system.md](docs/design-system.md) | Surfaces, spacing, radius, hierarchy, colorways |
+| [panels-and-terminals.md](docs/panels-and-terminals.md) | Panel grid, layouts, focus routing, PTY terminals |
 | [troubleshooting.md](docs/troubleshooting.md) | Known issues, including the Electron ESM hang |
 
 ## Security posture

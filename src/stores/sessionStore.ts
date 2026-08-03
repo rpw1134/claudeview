@@ -14,6 +14,16 @@ type SessionState = {
   activeTabId: string | null
 
   openTab: (options?: Partial<CreateSessionRequest> & { title?: string }) => Promise<string>
+  /**
+   * Open a session under a caller-supplied tab id.
+   *
+   * Panels mint their own ref id before the session exists, so they need to say
+   * which id the session should use rather than being handed one back.
+   */
+  openTabWithId: (
+    tabId: string,
+    options?: Partial<CreateSessionRequest> & { title?: string },
+  ) => Promise<void>
   closeTab: (tabId: string) => Promise<void>
   setActiveTab: (tabId: string) => void
   setActiveLane: (tabId: string, laneId: string) => void
@@ -317,6 +327,11 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
 
   openTab: async (options = {}) => {
     const tabId = newId()
+    await getState().openTabWithId(tabId, options)
+    return tabId
+  },
+
+  openTabWithId: async (tabId, options = {}) => {
     setState((state) => ({
       tabs: [...state.tabs, emptyTab(tabId, options)],
       activeTabId: tabId,
@@ -338,7 +353,6 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
         { kind: 'status', status: 'error' },
       ])
     }
-    return tabId
   },
 
   closeTab: async (tabId) => {

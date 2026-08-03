@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { Api, StreamEnvelope } from '../../shared/ipc'
-import { STREAM_CHANNEL } from '../../shared/ipc'
+import type { Api, StreamEnvelope, TerminalEnvelope } from '../../shared/ipc'
+import { STREAM_CHANNEL, TERMINAL_CHANNEL } from '../../shared/ipc'
 
 /**
  * The only bridge between the renderer and Node.
@@ -21,6 +21,11 @@ const api: Api = {
   'session:close': (payload) => ipcRenderer.invoke('session:close', payload),
   'sessions:list': (payload) => ipcRenderer.invoke('sessions:list', payload),
   'app:pick-directory': () => ipcRenderer.invoke('app:pick-directory'),
+  'terminal:create': (payload) => ipcRenderer.invoke('terminal:create', payload),
+  'terminal:write': (payload) => ipcRenderer.invoke('terminal:write', payload),
+  'terminal:resize': (payload) => ipcRenderer.invoke('terminal:resize', payload),
+  'terminal:close': (payload) => ipcRenderer.invoke('terminal:close', payload),
+  'terminal:scrollback': (payload) => ipcRenderer.invoke('terminal:scrollback', payload),
   'app:info': () => ipcRenderer.invoke('app:info'),
 
   onStreamEvent: (handler) => {
@@ -29,6 +34,12 @@ const api: Api = {
     const listener = (_event: IpcRendererEvent, envelope: StreamEnvelope) => handler(envelope)
     ipcRenderer.on(STREAM_CHANNEL, listener)
     return () => ipcRenderer.removeListener(STREAM_CHANNEL, listener)
+  },
+
+  onTerminalEvent: (handler) => {
+    const listener = (_event: IpcRendererEvent, envelope: TerminalEnvelope) => handler(envelope)
+    ipcRenderer.on(TERMINAL_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_CHANNEL, listener)
   },
 }
 

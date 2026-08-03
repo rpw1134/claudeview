@@ -14,7 +14,7 @@ import electron from 'vite-plugin-electron/simple'
  * resolved against node_modules — which is also why it belongs in `dependencies`
  * rather than `devDependencies`, so electron-builder ships it.
  */
-const EXTERNAL_MAIN_DEPS = ['electron', '@anthropic-ai/claude-agent-sdk']
+const EXTERNAL_MAIN_DEPS = ['electron', '@anthropic-ai/claude-agent-sdk', 'node-pty']
 
 /**
  * Production CSP. The renderer makes no network requests of any kind — every byte

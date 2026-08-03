@@ -4,6 +4,7 @@ import { listSessions } from '../sdk'
 import os from 'node:os'
 import type { IpcCalls, SessionSummary } from '../../../shared/ipc'
 import type { SessionManager } from '../session/SessionManager'
+import type { TerminalManager } from '../terminal/TerminalManager'
 
 /**
  * Type-safe wrapper over `ipcMain.handle`.
@@ -19,7 +20,11 @@ function handle<K extends keyof IpcCalls>(
   ipcMain.handle(channel, (_event, payload) => handler(payload as IpcCalls[K][0]))
 }
 
-export function registerIpc(sessions: SessionManager, getWindow: () => BrowserWindow | null): void {
+export function registerIpc(
+  sessions: SessionManager,
+  terminals: TerminalManager,
+  getWindow: () => BrowserWindow | null,
+): void {
   handle('session:create', async (request) => {
     try {
       await sessions.create(request)
@@ -77,6 +82,24 @@ export function registerIpc(sessions: SessionManager, getWindow: () => BrowserWi
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
+  handle('terminal:create', ({ id, cwd, cols, rows }) => {
+    terminals.create(id, { cwd, cols, rows })
+  })
+
+  handle('terminal:write', ({ id, data }) => {
+    terminals.write(id, data)
+  })
+
+  handle('terminal:resize', ({ id, cols, rows }) => {
+    terminals.resize(id, cols, rows)
+  })
+
+  handle('terminal:close', ({ id }) => {
+    terminals.close(id)
+  })
+
+  handle('terminal:scrollback', ({ id }) => terminals.scrollback(id))
+
   handle('app:info', () => ({
     cwd: process.cwd(),
     version: app.getVersion(),
@@ -96,6 +119,11 @@ export function unregisterIpc(): void {
     'sessions:list',
     'app:pick-directory',
     'app:info',
+    'terminal:create',
+    'terminal:write',
+    'terminal:resize',
+    'terminal:close',
+    'terminal:scrollback',
   ]
   for (const channel of channels) ipcMain.removeHandler(channel)
 }
