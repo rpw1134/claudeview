@@ -1,11 +1,11 @@
 # Panels and terminals
 
-The window is a grid of up to **8 panels**. Each panel is either a Claude **session**
+The window holds up to **8 panels** in a freely rearrangeable split layout. Each panel is either a Claude **session**
 or a **terminal**, and a single message bar at the bottom targets whichever panel is
 focused.
 
 ```
-┌─ WorkspaceBar ──── add panel · layout picker · settings ───────────┐
+┌─ WorkspaceBar ──── add panel · split direction · tidy · settings ──┐
 ├──────────────────────────┬─────────────────────────────────────────┤
 │  session panel           │  terminal panel        ← accent ring    │
 │  (transcript + lanes)    │  (xterm + PTY)            = focused     │
@@ -170,7 +170,7 @@ pgrep -fl "zsh|bash" | grep -v login
 | `⇧⌘T` | New terminal panel |
 | `⌘W` | Close focused panel |
 | `⌘1`–`⌘9` | Focus panel by position |
+| `⌘,` | Appearance |
 
 Rearranging is drag-only for now — there are no keyboard commands for moving a panel
 or resizing a split.
-| `⌘,` | Appearance |
