@@ -1,0 +1,137 @@
+import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
+// See electron/main/sdk.ts — the SDK must not be statically ESM-imported here.
+import { listSessions } from '../sdk'
+import os from 'node:os'
+import type { IpcCalls, SessionSummary } from '../../../shared/ipc'
+import type { SessionManager } from '../session/SessionManager'
+
+/**
+ * Type-safe wrapper over `ipcMain.handle`.
+ *
+ * Binding the channel name to its request/response types from `IpcCalls` means a
+ * handler whose signature drifts from the contract fails to compile, instead of
+ * failing at runtime as an `undefined` in the UI.
+ */
+function handle<K extends keyof IpcCalls>(
+  channel: K,
+  handler: (payload: IpcCalls[K][0]) => Promise<IpcCalls[K][1]> | IpcCalls[K][1],
+): void {
+  ipcMain.handle(channel, (_event, payload) => handler(payload as IpcCalls[K][0]))
+}
+
+export function registerIpc(sessions: SessionManager, getWindow: () => BrowserWindow | null): void {
+  handle('session:create', async (request) => {
+    try {
+      await sessions.create(request)
+      return { ok: true as const }
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  handle('session:send', ({ tabId, text }) => {
+    sessions.get(tabId)?.send(text)
+  })
+
+  handle('session:interrupt', async ({ tabId }) => {
+    await sessions.get(tabId)?.interrupt()
+  })
+
+  handle('session:set-permission-mode', async ({ tabId, mode }) => {
+    await sessions.get(tabId)?.setPermissionMode(mode)
+  })
+
+  handle('session:set-model', async ({ tabId, model }) => {
+    await sessions.get(tabId)?.setModel(model)
+  })
+
+  handle('session:close', async ({ tabId }) => {
+    await sessions.close(tabId)
+  })
+
+  /**
+   * Sessions on disk, for the resume picker.
+   *
+   * The renderer keeps its own tab list in localStorage, but that only knows about
+   * sessions this app started. `listSessions()` reads the same `~/.claude/projects`
+   * store the CLI writes, so terminal sessions show up here too — which is the
+   * point, since the goal is to stop living in the terminal without losing history.
+   */
+  handle('sessions:list', async ({ cwd, limit }) => {
+    try {
+      const found = await listSessions({ dir: cwd, limit: limit ?? 50 })
+      return found.map(toSummary)
+    } catch {
+      // A missing or unreadable session store is normal on a fresh machine.
+      return []
+    }
+  })
+
+  handle('app:pick-directory', async () => {
+    const window = getWindow()
+    if (!window) return null
+    const result = await dialog.showOpenDialog(window, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose a working directory',
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
+  handle('app:info', () => ({
+    cwd: process.cwd(),
+    version: app.getVersion(),
+    home: os.homedir(),
+  }))
+}
+
+/** Remove every handler. Paired with `registerIpc` so a reload can't double-register. */
+export function unregisterIpc(): void {
+  const channels: (keyof IpcCalls)[] = [
+    'session:create',
+    'session:send',
+    'session:interrupt',
+    'session:set-permission-mode',
+    'session:set-model',
+    'session:close',
+    'sessions:list',
+    'app:pick-directory',
+    'app:info',
+  ]
+  for (const channel of channels) ipcMain.removeHandler(channel)
+}
+
+/**
+ * Normalize the SDK's session record into our summary shape.
+ *
+ * Field names have shifted across SDK versions, so read defensively rather than
+ * binding tightly to one shape — a renamed timestamp should cost a missing
+ * "2 hours ago" label, not an exception that empties the whole picker.
+ */
+function toSummary(raw: unknown): SessionSummary {
+  const record = (raw ?? {}) as Record<string, unknown>
+  const pick = (...keys: string[]): unknown => keys.map((k) => record[k]).find((v) => v != null)
+
+  const timestamp = pick('lastModified', 'updatedAt', 'modifiedAt', 'timestamp')
+
+  return {
+    sessionId: String(pick('sessionId', 'id') ?? ''),
+    title: asString(pick('title', 'summary', 'name')),
+    cwd: asString(pick('cwd', 'dir', 'projectPath')),
+    updatedAt: toEpochMs(timestamp),
+    messageCount: typeof record.messageCount === 'number' ? record.messageCount : undefined,
+  }
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function toEpochMs(value: unknown): number | undefined {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? undefined : parsed
+  }
+  if (value instanceof Date) return value.getTime()
+  return undefined
+}

@@ -1,0 +1,132 @@
+# Troubleshooting
+
+## The Electron ESM hang
+
+**Symptom.** Nothing happens. The window opens, the UI renders, but no session ever
+starts. No error, no rejected promise, no stack trace. The app stays fully
+responsive.
+
+**Cause.** A static ESM import of the Agent SDK in Electron's **main process** never
+resolves:
+
+```ts
+// Hangs forever in Electron main. Not slow — never settles.
+import { query } from '@anthropic-ai/claude-agent-sdk'
+await import('@anthropic-ai/claude-agent-sdk')
+```
+
+Verified against Electron 40.10.6 / SDK 0.3.220 / Node 24: `await import(...)`
+produced no result after 2.5 minutes, while the identical call from plain Node
+completed in well under a second. `app.whenReady()` resolves normally first, so the
+hang is specifically in the module load.
+
+The trigger appears to be Electron's ESM loader meeting this particular module:
+`sdk.mjs` is ~1.2MB packed into ~141 extremely long lines.
+
+**Fix.** Load it through `createRequire`, which routes the load via Node's CJS
+loader (Node 22+ can `require()` an ESM package). Same file, ~100ms:
+
+```ts
+// electron/main/sdk.ts
+const nodeRequire = createRequire(import.meta.url)
+const sdk: typeof AgentSdk = nodeRequire('@anthropic-ai/claude-agent-sdk')
+```
+
+Types still come from a type-only import, erased at compile time.
+`verbatimModuleSyntax` in tsconfig guarantees that `import type` can't silently
+become a runtime import and reintroduce the hang.
+
+**If you touch this:** every SDK access in the codebase goes through
+`electron/main/sdk.ts`. Keep it that way — it's the single revert point if a future
+Electron or SDK release fixes the ESM path.
+
+---
+
+## `Native CLI binary for <platform>-<arch> not found`
+
+**Cause.** The SDK got inlined into the main bundle. It resolves the `claude` binary
+relative to its own package directory, so bundling moves the resolution base.
+
+**Check:**
+
+```bash
+npm run build
+ls -la dist-electron/main/index.js     # should be ~15KB, not ~1.2MB
+grep -c 'from "@anthropic-ai/claude-agent-sdk"' dist-electron/main/index.js
+```
+
+**Fix.** The SDK must be external in `vite.config.ts`. Vite 8 bundles with Rolldown,
+so the option moved — `EXTERNAL_MAIN_DEPS` is declared under **both**
+`rolldownOptions` and `rollupOptions` so it applies either way. It must also stay in
+`dependencies` (not `devDependencies`) so electron-builder ships it.
+
+---
+
+## Sessions don't appear in the resume list
+
+The list comes from the SDK's `listSessions()`, reading the same `~/.claude/projects`
+store the CLI writes.
+
+- **Empty on a fresh machine** is expected — run `claude` once first.
+- **Filtered to "This directory"** only matches sessions whose recorded `cwd` is that
+  directory.
+- **Field names have shifted across SDK versions.** `toSummary()` in
+  `electron/main/ipc/register.ts` reads defensively across several key spellings, so
+  a rename costs a missing "2 hours ago" label rather than an empty list. If titles
+  or timestamps go missing, add the new key there.
+
+---
+
+## The preload bridge is missing
+
+```
+The preload bridge is missing. `window.claudeview` was not exposed
+```
+
+The preload script didn't load. It must build to **`dist-electron/preload/index.cjs`**
+— CommonJS, `.cjs` extension — and that path must match `webPreferences.preload` in
+`electron/main/index.ts`. Rebuild and confirm the file exists.
+
+---
+
+## Output looks jumpy or laggy
+
+Tune `DRAIN_WINDOW_MS` in `src/lib/streamBuffers.ts` (default 220ms). Lower for less
+lag, higher for more smoothing. See [streaming.md](streaming.md#tuning) for the full
+set of dials.
+
+If output arrives in visible clumps despite tuning, confirm batching is working —
+add a temporary log in `EventBatcher.flush()` and check that a turn produces a
+handful of batches, not hundreds.
+
+---
+
+## A closed tab left a `claude` process behind
+
+```bash
+pgrep -fl claude | grep -v Claude.app
+```
+
+Some teardown path bypassed `SessionRunner.dispose()`. Any new route that removes a
+session must call it rather than just dropping the registry entry — see
+[lifecycle-and-cleanup.md](lifecycle-and-cleanup.md).
+
+---
+
+## Permission prompts never appear
+
+By design. The default mode is `auto`, which routes decisions through a model
+classifier rather than prompting. Interactive approval requires a `canUseTool`
+handler wired through IPC to a UI dialog — not currently implemented; `default`
+("Ask") mode has no renderer-side prompt yet. Until then, `plan` mode is the safe
+choice for untrusted work.
+
+---
+
+## Typecheck fails with `Option 'baseUrl' has been removed`
+
+TypeScript 7 removed `baseUrl`. Path aliases must be relative to `tsconfig.json`:
+
+```jsonc
+"paths": { "@/*": ["./src/*"], "@shared/*": ["./shared/*"] }   // note the ./
+```

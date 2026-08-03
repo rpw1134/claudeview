@@ -1,0 +1,74 @@
+import type { PermissionMode, SessionStatus } from '@shared/ipc'
+
+/**
+ * The renderer's transcript model.
+ *
+ * Note what is **not** here: the text of assistant messages. A `text` item stores
+ * only its `blockId`; the characters live in `streamBuffers` (see
+ * `src/lib/streamBuffers.ts`).
+ *
+ * That split is deliberate. Text arrives dozens of times per second, while
+ * structure changes only when a block, tool call, or turn begins or ends. Keeping
+ * text out of React state means the per-frame update path touches one subscribed
+ * component instead of producing a new store snapshot — and a store snapshot means
+ * every `useStore` selector in the app re-evaluates.
+ */
+export type TranscriptItem =
+  | { kind: 'text'; id: string; blockId: string }
+  | { kind: 'thinking'; id: string; blockId: string }
+  | { kind: 'user'; id: string; text: string }
+  | {
+      kind: 'tool'
+      id: string
+      toolUseId: string
+      name: string
+      input: unknown
+      status: 'running' | 'ok' | 'error'
+      preview?: string
+      /** Set when this tool call spawned a subagent, to link to that lane. */
+      spawnedLaneId?: string
+    }
+
+/**
+ * One transcript view. The main thread is lane `'main'`; each subagent gets its
+ * own lane so its output can be read on its own instead of interleaved.
+ */
+export type Lane = {
+  id: string
+  /** Subagent type (e.g. `'Explore'`). Absent on the main lane. */
+  type?: string
+  description?: string
+  /** True once the subagent finished. */
+  closed: boolean
+  items: TranscriptItem[]
+}
+
+export type Tab = {
+  id: string
+  title: string
+  cwd?: string
+  /** Assigned by the SDK once the session starts; needed to resume. */
+  sessionId?: string
+  status: SessionStatus
+  model?: string
+  permissionMode: PermissionMode
+  tools: string[]
+  lanes: Record<string, Lane>
+  /** Lane render order; `'main'` is always first. */
+  laneOrder: string[]
+  activeLaneId: string
+  totalCostUsd: number
+  lastError?: string
+  createdAt: number
+  /** Block ids already materialized as items, so a delta doesn't re-create one. */
+  seenBlockIds: Set<string>
+}
+
+/** The slice of a tab persisted to localStorage so sessions survive a restart. */
+export type PersistedTab = {
+  id: string
+  title: string
+  cwd?: string
+  sessionId?: string
+  createdAt: number
+}

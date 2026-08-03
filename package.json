@@ -1,0 +1,59 @@
+{
+  "name": "claudeview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A streaming desktop UI for Claude Code. Runs the Claude Agent SDK in Electron's main process and renders the message stream as smooth, readable markdown.",
+  "author": "rpw1134",
+  "license": "MIT",
+  "main": "dist-electron/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.220"
+  },
+  "devDependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-scroll-area": "^1.2.18",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-separator": "^1.1.15",
+    "@radix-ui/react-slider": "^1.4.7",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dompurify": "^3.4.12",
+    "electron": "^40.10.6",
+    "electron-builder": "^26.15.3",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "^1.28.0",
+    "marked": "^18.0.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vite-plugin-electron": "^1.1.0",
+    "zustand": "^5.0.14"
+  },
+  "build": {
+    "appId": "dev.rpw1134.claudeview",
+    "productName": "ClaudeView",
+    "files": ["dist/**/*", "dist-electron/**/*"],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}
