@@ -16,8 +16,16 @@ export function App() {
 
   const tabs = useSessionStore((state) => state.tabs)
   const activeTabId = useSessionStore((state) => state.activeTabId)
-  const { openTab, closeTab, setActiveTab, setActiveLane, send, interrupt, setPermissionMode } =
-    useSessionStore.getState()
+  const {
+    openTab,
+    closeTab,
+    setActiveTab,
+    setActiveLane,
+    send,
+    interrupt,
+    setPermissionMode,
+    reconnect,
+  } = useSessionStore.getState()
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [home, setHome] = useState<string | undefined>()
@@ -91,9 +99,10 @@ export function App() {
           />
           <Composer
             status={activeTab.status}
-            disabled={activeTab.status === 'closed' || activeTab.status === 'error'}
+            error={activeTab.lastError}
             onSend={(text) => void send(activeTab.id, text)}
             onInterrupt={() => void interrupt(activeTab.id)}
+            onReconnect={() => void reconnect(activeTab.id)}
           />
           <StatusBar
             tab={activeTab}

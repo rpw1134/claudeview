@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { AlertCircle, ArrowUp, RefreshCw, Square } from 'lucide-react'
 import type { SessionStatus } from '@shared/ipc'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
@@ -34,17 +34,28 @@ export function Composer({
   status,
   onSend,
   onInterrupt,
-  disabled,
+  onReconnect,
+  error,
 }: {
   status: SessionStatus
   onSend: (text: string) => void
   onInterrupt: () => void
-  disabled?: boolean
+  onReconnect: () => void
+  error?: string
 }) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const isBusy = status === 'thinking' || status === 'streaming' || status === 'tool'
+  /**
+   * The session is over — the subprocess exited, or startup failed.
+   *
+   * Previously this just disabled the input, which left the tab looking broken with
+   * no explanation and no way back. Now it says what happened and offers a restart,
+   * so an ended session is a recoverable state rather than a dead tab.
+   */
+  const isEnded = status === 'closed' || status === 'error'
+  const disabled = isEnded
 
   useEffect(() => {
     const element = textareaRef.current
@@ -77,6 +88,33 @@ export function Composer({
   )
 
   const canSend = value.trim().length > 0 && !disabled
+
+  if (isEnded) {
+    return (
+      <div className="shrink-0 border-t border-line bg-surface py-4">
+        <div className="mx-auto w-full max-w-[calc(var(--measure)+8rem)] px-8">
+          <div className="flex items-center gap-4 rounded-xl bg-raised px-4 py-3">
+            <AlertCircle
+              size={16}
+              className={cn('shrink-0', status === 'error' ? 'text-danger' : 'text-text-faint')}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-text">
+                {status === 'error' ? 'This session hit an error.' : 'This session has ended.'}
+              </p>
+              <p className="mt-1 truncate text-xs text-text-faint">
+                {error ?? 'Reconnecting resumes the conversation where it left off.'}
+              </p>
+            </div>
+            <Button variant="primary" size="lg" onClick={onReconnect} className="shrink-0">
+              <RefreshCw size={14} />
+              Reconnect
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="shrink-0 border-t border-line bg-surface py-4">

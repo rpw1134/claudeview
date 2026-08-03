@@ -20,6 +20,8 @@ type SessionState = {
   renameTab: (tabId: string, title: string) => void
 
   send: (tabId: string, text: string) => Promise<void>
+  /** Restart a tab's session in place after it ended or failed. */
+  reconnect: (tabId: string) => Promise<void>
   interrupt: (tabId: string) => Promise<void>
   setPermissionMode: (tabId: string, mode: PermissionMode) => Promise<void>
 
@@ -375,6 +377,63 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
   send: async (tabId, text) => {
     if (!text.trim()) return
     await api['session:send']({ tabId, text })
+  },
+
+  /**
+   * Restart a dead session in the same tab.
+   *
+   * A session can end for reasons the user didn't ask for — the subprocess exits,
+   * the machine sleeps, something upstream fails. Before this existed, the tab just
+   * went permanently grey: the composer disabled, no explanation, no way back
+   * short of closing the tab and losing the thread. A dead end with no recovery is
+   * a bug even when the underlying failure is legitimate.
+   *
+   * The transcript is cleared first because resuming re-hydrates the stored history;
+   * keeping the old items would render everything twice.
+   */
+  reconnect: async (tabId) => {
+    const tab = getState().tabs.find((entry) => entry.id === tabId)
+    if (!tab) return
+
+    const blockIds: string[] = []
+    for (const lane of Object.values(tab.lanes)) {
+      for (const item of lane.items) {
+        if (item.kind === 'text' || item.kind === 'thinking') blockIds.push(item.blockId)
+      }
+    }
+    streamBuffers.release(blockIds)
+
+    setState((state) => ({
+      tabs: state.tabs.map((entry) =>
+        entry.id === tabId
+          ? {
+              ...entry,
+              status: 'starting' as const,
+              lastError: undefined,
+              lanes: { [MAIN_LANE]: { id: MAIN_LANE, closed: false, items: [] } },
+              laneOrder: [MAIN_LANE],
+              activeLaneId: MAIN_LANE,
+              seenBlockIds: new Set<string>(),
+            }
+          : entry,
+      ),
+    }))
+
+    // `resume` is undefined when the session never got far enough to be assigned
+    // an id, which correctly starts a fresh one instead of failing.
+    const response = await api['session:create']({
+      tabId,
+      cwd: tab.cwd,
+      resume: tab.sessionId,
+      permissionMode: tab.permissionMode,
+    })
+
+    if (!response.ok) {
+      getState().applyEvents(tabId, [
+        { kind: 'error', message: response.error },
+        { kind: 'status', status: 'error' },
+      ])
+    }
   },
 
   interrupt: async (tabId) => {

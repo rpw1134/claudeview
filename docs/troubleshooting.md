@@ -94,6 +94,42 @@ keeps serving the previous build on the port your app connects to.
 
 ---
 
+## Sending a message does nothing
+
+Work through these in order.
+
+**1. Is the composer showing a "Reconnect" panel instead of an input?** Then the
+session ended — the subprocess exited, startup failed, or something killed it.
+Click Reconnect; it resumes the conversation in place. (Before this panel existed
+the tab just went grey with no explanation, which looked exactly like "sending is
+broken".)
+
+**2. Are you looking at a stale window?** Every `npm run dev` starts a *new*
+Electron instance against a *new* Vite port, and an older window left open keeps
+running the code it was launched with. Two symptoms of the same cause: the CSP
+error on a port you thought you'd restarted, and an app that ignores a fix you just
+made. Check what's actually running:
+
+```bash
+pgrep -fl "claudeview/node_modules/electron"
+lsof -nP -iTCP -sTCP:LISTEN | grep 517
+```
+
+Kill everything and start one:
+
+```bash
+pkill -f "claudeview/node_modules/electron"; pkill -f "claudeview/node_modules/.bin/vite"
+npm run dev
+```
+
+**3. Still nothing?** Open DevTools with `CLAUDEVIEW_DEVTOOLS=1 npm run dev` and
+check the console while sending. The send path is
+Composer → `sessionStore.send` → `session:send` IPC → `SessionRunner.send` →
+`AsyncMessageQueue.push`. All four are exercised by the checks below, which pass on
+new sessions (click and Enter) and on resumed sessions.
+
+---
+
 ## A session sits on "Starting…" and shows no messages
 
 **Cause.** The CLI emits **nothing at all** until it receives a first user message —
