@@ -22,7 +22,9 @@ for the job.
 - **Subagent views.** Subagents get their own transcript lanes instead of being
   interleaved into one unreadable stream.
 - **Resume anything.** Sessions started here *or in the terminal* are listed and
-  resumable — they share the same on-disk store.
+  resumable — they share the same on-disk store. Resuming replays the stored
+  transcript, since the CLI itself replays nothing (main thread only; see
+  [troubleshooting](docs/troubleshooting.md#a-session-sits-on-starting-and-shows-no-messages)).
 - **Adjustable appearance.** Five colorways, four typefaces, and live control over
   text size, line height, and line width. `⌘,`
 - **Auto permission mode by default**, changeable per session from the status bar.

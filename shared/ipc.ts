@@ -86,10 +86,17 @@ export type SessionSummary = {
  * possible shape.
  */
 export type StreamEvent =
-  /** Token-level text from the model. The hot path; keep this shape minimal. */
-  | { kind: 'text-delta'; blockId: string; text: string; agent: AgentRef }
+  /**
+   * Token-level text from the model. The hot path; keep this shape minimal.
+   *
+   * `historical` marks text replayed from a resumed session's transcript rather
+   * than arriving live. The renderer reveals those instantly instead of running
+   * them through the typewriter — nobody wants to watch an hour of prior
+   * conversation type itself back in.
+   */
+  | { kind: 'text-delta'; blockId: string; text: string; agent: AgentRef; historical?: true }
   /** Extended-thinking text, streamed separately so the UI can collapse it. */
-  | { kind: 'thinking-delta'; blockId: string; text: string; agent: AgentRef }
+  | { kind: 'thinking-delta'; blockId: string; text: string; agent: AgentRef; historical?: true }
   /** A content block is complete; the renderer can stop its typewriter drain. */
   | { kind: 'block-end'; blockId: string; agent: AgentRef }
 
@@ -103,6 +110,16 @@ export type StreamEvent =
       tools: string[]
       agents: string[]
     }
+  /**
+   * Emitted as soon as the subprocess is up, before the CLI has reported anything.
+   *
+   * This exists because the CLI is **silent until it receives a first user
+   * message** — it does not emit `system/init` on spawn. Waiting for `session-init`
+   * to leave the "starting" state therefore leaves a freshly opened or resumed tab
+   * stuck on "Starting…" indefinitely. This event says "the process is up and ready
+   * for input"; `session-init` later fills in model and tool details.
+   */
+  | { kind: 'session-attached'; sessionId?: string; cwd?: string }
   | { kind: 'status'; status: SessionStatus; detail?: string }
 
   /** Tool call lifecycle. `input` is pre-truncated in main to bound payload size. */

@@ -31,10 +31,12 @@ const sdk: typeof AgentSdk = nodeRequire('@anthropic-ai/claude-agent-sdk')
 
 export const query = sdk.query
 export const listSessions = sdk.listSessions
+export const getSessionMessages = sdk.getSessionMessages
 
 export type {
   Options,
   Query,
   SDKMessage,
   SDKUserMessage,
+  SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk'

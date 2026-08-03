@@ -94,6 +94,45 @@ keeps serving the previous build on the port your app connects to.
 
 ---
 
+## A session sits on "Starting…" and shows no messages
+
+**Cause.** The CLI emits **nothing at all** until it receives a first user message —
+not even `system/init`. Measured: a new session produced 0 messages in 14s of
+silence, and a resumed one 0 messages in 20s. Anything that waits for
+`session-init` to consider a tab ready therefore waits forever. Resume additionally
+restores the *model's* context but replays nothing to the SDK consumer, so the
+transcript stays empty.
+
+**Fix (already implemented).** `SessionRunner.attach()` does the two things the CLI
+won't:
+
+- emits `session-attached` + `status: 'idle'` as soon as the subprocess is up, so
+  the tab is usable immediately;
+- on resume, replays the stored transcript via `getSessionMessages()`, normalized
+  through the same path as live messages so tool calls and thinking blocks
+  reconstruct.
+
+**Known limitation.** Replayed transcripts reconstruct the *main* thread only.
+Subagent output lives in separate per-subagent transcripts (`getSubagentMessages`),
+which the hydration path doesn't read yet — so on a resumed session the Task tool
+call appears but its subagent lane does not. Live subagent lanes are unaffected.
+Replay is also capped at the last `MAX_HISTORY_MESSAGES` (400) messages.
+
+---
+
+## A resumed transcript shows every line twice
+
+Fixed, but worth understanding if you touch `streamBuffers`. Block ids come from
+model message ids, which are unique only *within* a session. `streamBuffers` is a
+single global store, so two tabs resuming the **same** session produced identical
+keys and both appended into one buffer — rendering every line twice.
+
+Keys are namespaced by tab via `bufferKeyFor(tabId, blockId)` in
+`src/stores/sessionStore.ts`. Any new call into `streamBuffers` from the store must
+use that helper rather than a raw `event.blockId`.
+
+---
+
 ## Sessions don't appear in the resume list
 
 The list comes from the SDK's `listSessions()`, reading the same `~/.claude/projects`

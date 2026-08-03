@@ -1,4 +1,4 @@
-import type { SDKMessage } from '../sdk'
+import type { SDKMessage, SessionMessage } from '../sdk'
 import type { AgentRef, PermissionMode, StreamEvent } from '../../../shared/ipc'
 import { MAIN_AGENT } from '../../../shared/ipc'
 
@@ -55,6 +55,73 @@ export class MessageNormalizer {
         // Every other variant is harness bookkeeping the UI has no use for.
         return []
     }
+  }
+
+  /**
+   * Replay a resumed session's stored transcript as UI events.
+   *
+   * Necessary because `resume` restores the *model's* context but replays nothing
+   * to the SDK consumer — the stream stays completely silent until the next user
+   * message. Without this, resuming showed an empty transcript.
+   *
+   * Reuses the same `onAssistant` / `onUser` paths as live messages, so tool calls,
+   * subagent lanes, and thinking blocks reconstruct exactly as they originally
+   * appeared. Two adjustments for history:
+   *
+   *  - `status` events are dropped. They describe what the agent is doing *now*;
+   *    replaying them would leave a resumed tab reading "Running tool…".
+   *  - Text deltas are tagged `historical` so the renderer paints them immediately
+   *    rather than typewriting an entire prior conversation.
+   */
+  normalizeHistory(messages: SessionMessage[]): StreamEvent[] {
+    const events: StreamEvent[] = []
+
+    for (const message of messages) {
+      // System entries are compact boundaries and harness notices — not conversation.
+      if (message.type === 'system') continue
+
+      const raw = message.message as { role?: string; content?: unknown } | undefined
+      if (!raw?.content) continue
+
+      // Shape a stored message into what the live handlers expect. `uuid` stands in
+      // for `message.id`, which stored transcripts don't always carry.
+      const shim = {
+        message: { id: message.uuid, ...raw },
+        uuid: message.uuid,
+        parent_tool_use_id: message.parent_tool_use_id,
+      }
+
+      const produced =
+        message.type === 'assistant'
+          ? this.onAssistant(shim as never)
+          : this.onUser(shim as never)
+
+      for (const event of produced) {
+        if (event.kind === 'status') continue
+        if (event.kind === 'text-delta' || event.kind === 'thinking-delta') {
+          events.push({ ...event, historical: true })
+        } else {
+          events.push(event)
+        }
+      }
+    }
+
+    // Stored transcripts include slash-command envelopes and local command output
+    // that the CLI renders as chrome, not conversation. Showing them would fill a
+    // resumed transcript with `<command-name>/clear</command-name>` noise.
+    return events.filter(
+      (event) => !(event.kind === 'user-message' && MessageNormalizer.isCommandNoise(event.text)),
+    )
+  }
+
+  private static isCommandNoise(text: string): boolean {
+    const trimmed = text.trimStart()
+    return (
+      trimmed.startsWith('<command-name>') ||
+      trimmed.startsWith('<command-message>') ||
+      trimmed.startsWith('<local-command-stdout>') ||
+      trimmed.startsWith('<user-prompt-submit-hook>')
+    )
   }
 
   private laneOf(message: {

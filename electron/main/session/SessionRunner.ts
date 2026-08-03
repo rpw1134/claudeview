@@ -1,6 +1,6 @@
 // Loaded via ../sdk rather than directly — a static ESM import of the Agent SDK
 // deadlocks Electron's main process. See electron/main/sdk.ts for the details.
-import { query, type Options, type Query, type SDKUserMessage } from '../sdk'
+import { getSessionMessages, query, type Options, type Query, type SDKUserMessage } from '../sdk'
 import type { CreateSessionRequest, PermissionMode, StreamEvent } from '../../../shared/ipc'
 import { AsyncMessageQueue } from './AsyncMessageQueue'
 import { EventBatcher } from './EventBatcher'
@@ -47,6 +47,9 @@ export type SessionRunnerDeps = {
  * then drop the emit callback (so nothing can post to a destroyed WebContents).
  */
 export class SessionRunner {
+  /** Upper bound on replayed transcript messages when resuming. */
+  private static readonly MAX_HISTORY_MESSAGES = 400
+
   readonly tabId: string
 
   private readonly queue = new AsyncMessageQueue<SDKUserMessage>()
@@ -85,6 +88,73 @@ export class SessionRunner {
     if (this.request.initialPrompt) this.send(this.request.initialPrompt)
 
     this.loop = this.consume()
+    void this.attach()
+  }
+
+  /**
+   * Bring the tab to a usable state without waiting on the CLI.
+   *
+   * The CLI emits **nothing at all** — not even `system/init` — until it receives a
+   * first user message. Verified on both new and resumed sessions: 14s and 20s of
+   * silence respectively with no input sent. So a tab that waits for `session-init`
+   * before leaving "Starting…" waits forever.
+   *
+   * This does the two things the CLI won't do for us: replay the stored transcript
+   * on a resume, and declare the session ready for input.
+   */
+  private async attach(): Promise<void> {
+    if (this.request.resume) {
+      await this.hydrateHistory(this.request.resume)
+
+      if (!this.disposed) {
+        this.push({
+          kind: 'session-attached',
+          sessionId: this.request.resume,
+          cwd: this.request.cwd,
+        })
+        // Record the id now so a tab closed before its first message is still
+        // resumable. A fork gets a *new* id from `session-init`, so don't claim
+        // the source id as this tab's own in that case.
+        if (!this.request.forkSession) {
+          this.sessionId = this.request.resume
+          this.onSessionId(this.request.resume)
+        }
+      }
+    } else if (!this.disposed) {
+      this.push({ kind: 'session-attached', cwd: this.request.cwd })
+    }
+
+    // If an initial prompt was queued, a turn is already underway — leave the
+    // status alone rather than overwriting "thinking" with "idle".
+    if (!this.disposed && !this.request.initialPrompt) {
+      this.push({ kind: 'status', status: 'idle' })
+    }
+  }
+
+  /** Load and replay a resumed session's stored transcript. */
+  private async hydrateHistory(sessionId: string): Promise<void> {
+    try {
+      const stored = await getSessionMessages(sessionId, { dir: this.request.cwd })
+      if (this.disposed || stored.length === 0) return
+
+      // Cap the replay. Long sessions run to thousands of messages, and rebuilding
+      // all of them costs IPC payload and renderer nodes for scrollback nobody
+      // reads. The tail is the part that provides context for what comes next.
+      const tail =
+        stored.length > SessionRunner.MAX_HISTORY_MESSAGES
+          ? stored.slice(-SessionRunner.MAX_HISTORY_MESSAGES)
+          : stored
+
+      const events = this.normalizer.normalizeHistory(tail)
+      if (events.length > 0) this.batcher.add(events)
+    } catch (error) {
+      // A missing or unreadable transcript must not block the session — the user
+      // can still continue the conversation, just without visible scrollback.
+      this.push({
+        kind: 'error',
+        message: `Could not load previous messages: ${describeError(error)}`,
+      })
+    }
   }
 
   private buildOptions(): Options {

@@ -51,6 +51,21 @@ function emptyTab(id: string, options: Partial<CreateSessionRequest> & { title?:
   }
 }
 
+/**
+ * Namespace a block id to its tab before using it as a stream-buffer key.
+ *
+ * Block ids come from the model's message ids, which are only unique *within* a
+ * session. Two tabs resuming the same session therefore produce identical block
+ * ids, and because `streamBuffers` is a single global store, both tabs would
+ * append into the same buffer — the transcript renders every line twice.
+ *
+ * Prefixing with the tab id makes the key unique per tab, which is the level the
+ * buffer store actually operates at.
+ */
+function bufferKeyFor(tabId: string, blockId: string): string {
+  return `${tabId}::${blockId}`
+}
+
 /** Trim the oldest items and release their stream buffers. */
 function trimLane(lane: Lane): Lane {
   if (lane.items.length <= MAX_ITEMS_PER_LANE) return lane
@@ -86,6 +101,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
 
   let status = tab.status
   let sessionId = tab.sessionId
+  let cwd = tab.cwd
   let model = tab.model
   let permissionMode = tab.permissionMode
   let tools = tab.tools
@@ -114,24 +130,33 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     switch (event.kind) {
       case 'text-delta':
       case 'thinking-delta': {
-        // The characters go to the buffer store, never into React state.
-        streamBuffers.append(event.blockId, event.text)
+        const bufferKey = bufferKeyFor(tab.id, event.blockId)
 
-        if (!seenBlockIds.has(event.blockId)) {
-          seenBlockIds.add(event.blockId)
+        // The characters go to the buffer store, never into React state.
+        streamBuffers.append(bufferKey, event.text)
+
+        // Replayed transcript: paint it immediately. Running an hour of prior
+        // conversation through the typewriter would be absurd.
+        if (event.historical) {
+          streamBuffers.finish(bufferKey)
+          streamBuffers.revealAll(bufferKey)
+        }
+
+        if (!seenBlockIds.has(bufferKey)) {
+          seenBlockIds.add(bufferKey)
           const lane = laneFor(event.agent.id)
           if (event.agent.type && !lane.type) lanes[lane.id] = { ...lane, type: event.agent.type }
           lanes[lane.id]!.items.push({
             kind: event.kind === 'text-delta' ? 'text' : 'thinking',
-            id: event.blockId,
-            blockId: event.blockId,
+            id: bufferKey,
+            blockId: bufferKey,
           } as TranscriptItem)
         }
         break
       }
 
       case 'block-end':
-        streamBuffers.finish(event.blockId)
+        streamBuffers.finish(bufferKeyFor(tab.id, event.blockId))
         break
 
       case 'user-message': {
@@ -206,6 +231,13 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         tools = event.tools
         break
 
+      case 'session-attached':
+        // Known before the CLI reports anything, so the tab is usable (and
+        // resumable) straight away. `session-init` fills in the rest later.
+        if (event.sessionId) sessionId = event.sessionId
+        if (event.cwd) cwd = event.cwd
+        break
+
       case 'status':
         status = event.status
         break
@@ -229,6 +261,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     title,
     status,
     sessionId,
+    cwd,
     model,
     permissionMode,
     tools,
