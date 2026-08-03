@@ -98,7 +98,7 @@ export function registerIpc(
     terminals.close(id)
   })
 
-  handle('terminal:scrollback', ({ id }) => terminals.scrollback(id))
+  handle('terminal:snapshot', ({ id }) => terminals.snapshot(id))
 
   handle('app:info', () => ({
     cwd: process.cwd(),
@@ -123,7 +123,7 @@ export function unregisterIpc(): void {
     'terminal:write',
     'terminal:resize',
     'terminal:close',
-    'terminal:scrollback',
+    'terminal:snapshot',
   ]
   for (const channel of channels) ipcMain.removeHandler(channel)
 }

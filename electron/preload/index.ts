@@ -25,7 +25,7 @@ const api: Api = {
   'terminal:write': (payload) => ipcRenderer.invoke('terminal:write', payload),
   'terminal:resize': (payload) => ipcRenderer.invoke('terminal:resize', payload),
   'terminal:close': (payload) => ipcRenderer.invoke('terminal:close', payload),
-  'terminal:scrollback': (payload) => ipcRenderer.invoke('terminal:scrollback', payload),
+  'terminal:snapshot': (payload) => ipcRenderer.invoke('terminal:snapshot', payload),
   'app:info': () => ipcRenderer.invoke('app:info'),
 
   onStreamEvent: (handler) => {

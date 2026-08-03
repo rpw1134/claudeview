@@ -17,9 +17,10 @@ for the job.
 - **Smooth streaming.** Token arrival is decoupled from token display, so bursty
   output reads as steady prose instead of lurching. See
   [docs/streaming.md](docs/streaming.md).
-- **Panels.** Up to 8 side-by-side panels in one window, each a Claude session or a
-  real terminal, with layout presets from single up to an 4x2 grid. One message bar
-  at the bottom targets whichever panel is focused. See
+- **Dynamic panels.** Up to 8 panels in one window, each a Claude session or a real
+  terminal. Drag a panel's header to rearrange, drag a divider to resize; the layout
+  is a split tree that always fills the viewport exactly. One message bar at the
+  bottom targets whichever panel is focused. See
   [panels-and-terminals.md](docs/panels-and-terminals.md).
 - **Real terminals.** `node-pty` + `xterm.js`, so `vim`, colour, and job control all
   work — not a stdout pipe.
@@ -58,6 +59,7 @@ npm run dev
 | `npm run dev`     | Vite dev server + Electron with hot reload          |
 | `npm run build`   | Typecheck, then build renderer, main, and preload   |
 | `npm run typecheck` | Types only                                        |
+| `npm test`        | Layout-tree invariants (pure, no DOM needed)        |
 | `npm run dist`    | Build and package a distributable via electron-builder |
 
 ## Keyboard shortcuts

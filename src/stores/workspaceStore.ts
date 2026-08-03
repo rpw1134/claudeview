@@ -1,23 +1,31 @@
 import { create } from 'zustand'
 import { api } from '@/lib/api'
 import { useSessionStore } from './sessionStore'
+import {
+  balance,
+  collectPanelIds,
+  insertPanel,
+  leaf,
+  movePanel,
+  removePanel,
+  setRatio,
+  swapPanels,
+  type DropPosition,
+  type LayoutNode,
+  type SplitDirection,
+} from '@/lib/layoutTree'
 
 /**
- * The panel workspace: what's on screen, where, and which panel has the keyboard.
+ * The panel workspace: what's open, how it's arranged, and which panel has focus.
  *
- * ## Layouts are presets, not a free-form split tree
+ * Arrangement lives in a binary split tree (`src/lib/layoutTree.ts`) rather than a
+ * list plus a preset. The tree always fills the viewport exactly, supports any
+ * arrangement the user drags into being, and makes both "drop a panel here" and
+ * "drag this divider" operations on one structure.
  *
- * A recursive split tree (drag any edge, nest arbitrarily) is more powerful and
- * much worse to use: every rearrangement becomes a pixel-dragging exercise, and
- * layouts drift into shapes you didn't intend. A fixed set of grid presets covers
- * the cases actually wanted here — halves, thirds, quadrants, six, eight — and
- * makes switching a single click with a predictable result.
- *
- * ## Panels reference, they don't own
- *
- * A panel holds an id pointing at a session tab or a terminal, never the state
- * itself. That keeps sessions alive when a panel is moved or the layout changes,
- * and means the existing session store needs no knowledge of panels at all.
+ * Panels hold a *reference* — a session tab id or a terminal id — never the state
+ * itself. Sessions and shells therefore survive being dragged to a new position,
+ * which is the whole point of moving a panel rather than recreating it.
  */
 
 export type PanelKind = 'session' | 'terminal'
@@ -27,70 +35,47 @@ export type Panel = {
   kind: PanelKind
   /** Session tab id, or terminal id. */
   refId: string
-  /** Shown in the panel header. */
   title: string
   cwd?: string
 }
 
-export type LayoutId = 'single' | 'columns-2' | 'rows-2' | 'columns-3' | 'grid-4' | 'grid-6' | 'grid-8'
-
-export type LayoutSpec = {
-  id: LayoutId
-  label: string
-  slots: number
-  /** Tailwind-free inline grid template, applied directly to the container. */
-  columns: string
-  rows: string
-}
-
-export const LAYOUTS: readonly LayoutSpec[] = [
-  { id: 'single', label: 'Single', slots: 1, columns: '1fr', rows: '1fr' },
-  { id: 'columns-2', label: 'Side by side', slots: 2, columns: '1fr 1fr', rows: '1fr' },
-  { id: 'rows-2', label: 'Stacked', slots: 2, columns: '1fr', rows: '1fr 1fr' },
-  { id: 'columns-3', label: 'Three columns', slots: 3, columns: '1fr 1fr 1fr', rows: '1fr' },
-  { id: 'grid-4', label: 'Quadrants', slots: 4, columns: '1fr 1fr', rows: '1fr 1fr' },
-  { id: 'grid-6', label: 'Six', slots: 6, columns: '1fr 1fr 1fr', rows: '1fr 1fr' },
-  { id: 'grid-8', label: 'Eight', slots: 8, columns: '1fr 1fr 1fr 1fr', rows: '1fr 1fr' },
-] as const
-
-export function layoutSpec(id: LayoutId): LayoutSpec {
-  return LAYOUTS.find((entry) => entry.id === id) ?? LAYOUTS[0]!
-}
+export const MAX_PANELS = 8
 
 type WorkspaceState = {
-  layout: LayoutId
   panels: Panel[]
+  layout: LayoutNode | null
   focusedPanelId: string | null
+  /** Panel currently being dragged, so the grid can dim it. */
+  draggingPanelId: string | null
 
-  setLayout: (layout: LayoutId) => void
   focusPanel: (panelId: string) => void
-  /** Add a panel, growing the layout if the current one is full. */
-  addPanel: (kind: PanelKind, options?: { cwd?: string; resume?: string; title?: string }) => Promise<void>
+  addPanel: (
+    kind: PanelKind,
+    options?: { cwd?: string; resume?: string; title?: string; direction?: SplitDirection },
+  ) => Promise<void>
   closePanel: (panelId: string) => Promise<void>
   renamePanel: (panelId: string, title: string) => void
+
+  setDragging: (panelId: string | null) => void
+  /** Commit a drag: move next to the target, or swap with it. */
+  dropPanel: (panelId: string, targetPanelId: string, position: DropPosition) => void
+  resizeSplit: (splitId: string, ratio: number) => void
+  balanceLayout: () => void
 }
 
 const newId = (): string => crypto.randomUUID()
 
-/** Smallest layout that fits `count` panels. */
-function layoutFor(count: number): LayoutId {
-  return (LAYOUTS.find((spec) => spec.slots >= count) ?? LAYOUTS[LAYOUTS.length - 1]!).id
-}
-
-export const MAX_PANELS = 8
-
 export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) => ({
-  layout: 'single',
   panels: [],
+  layout: null,
   focusedPanelId: null,
-
-  setLayout: (layout) => setState({ layout }),
+  draggingPanelId: null,
 
   focusPanel: (panelId) => setState({ focusedPanelId: panelId }),
 
   addPanel: async (kind, options = {}) => {
-    const { panels } = getState()
-    if (panels.length >= MAX_PANELS) return
+    const state = getState()
+    if (state.panels.length >= MAX_PANELS) return
 
     const panelId = newId()
     const refId = newId()
@@ -103,12 +88,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       cwd: options.cwd,
     }
 
-    setState((state) => ({
+    // Split the focused panel, along its longer axis unless told otherwise, so a
+    // new panel takes space from where the user is looking rather than from an
+    // arbitrary corner. Splitting the long way keeps both halves usable.
+    const target = state.focusedPanelId ?? state.panels[state.panels.length - 1]?.id
+    const direction: SplitDirection = options.direction ?? 'row'
+    const position = direction === 'row' ? 'right' : 'bottom'
+
+    setState({
       panels: [...state.panels, panel],
-      // Grow the layout to fit rather than hiding the panel that was just added.
-      layout: layoutFor(state.panels.length + 1),
+      layout:
+        state.layout && target
+          ? insertPanel(state.layout, target, panelId, position)
+          : leaf(panelId),
       focusedPanelId: panelId,
-    }))
+    })
 
     if (kind === 'session') {
       await useSessionStore.getState().openTabWithId(refId, {
@@ -116,11 +110,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
         resume: options.resume,
         title: options.title,
       })
-    } else {
-      // Terminals are created lazily by the panel component, which knows the
-      // pixel size and therefore the correct initial cols/rows. Creating one here
-      // with a guessed 80x24 makes the first paint reflow visibly.
     }
+    // Terminals are created by the panel component, which knows its pixel size and
+    // can therefore spawn the PTY at the right cols/rows the first time.
   },
 
   closePanel: async (panelId) => {
@@ -128,12 +120,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     if (!panel) return
 
     setState((state) => {
+      const layout = removePanel(state.layout, panelId)
       const panels = state.panels.filter((entry) => entry.id !== panelId)
+      const remaining = collectPanelIds(layout)
       return {
         panels,
-        layout: layoutFor(Math.max(1, panels.length)),
+        layout,
         focusedPanelId:
-          state.focusedPanelId === panelId ? (panels[panels.length - 1]?.id ?? null) : state.focusedPanelId,
+          state.focusedPanelId === panelId
+            ? (remaining[remaining.length - 1] ?? null)
+            : state.focusedPanelId,
       }
     })
 
@@ -148,9 +144,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     setState((state) => ({
       panels: state.panels.map((entry) => (entry.id === panelId ? { ...entry, title } : entry)),
     })),
+
+  setDragging: (panelId) => setState({ draggingPanelId: panelId }),
+
+  dropPanel: (panelId, targetPanelId, position) => {
+    if (panelId === targetPanelId) {
+      setState({ draggingPanelId: null })
+      return
+    }
+
+    setState((state) => ({
+      layout:
+        position === 'center'
+          ? swapPanels(state.layout, panelId, targetPanelId)
+          : movePanel(state.layout, panelId, targetPanelId, position),
+      draggingPanelId: null,
+      focusedPanelId: panelId,
+    }))
+  },
+
+  resizeSplit: (splitId, ratio) =>
+    setState((state) => ({ layout: setRatio(state.layout, splitId, ratio) })),
+
+  balanceLayout: () => setState((state) => ({ layout: balance(state.layout) })),
 }))
 
-/** The focused panel, or the only panel when nothing is explicitly focused. */
+/** The focused panel, falling back to the first one so there's always a target. */
 export function selectFocusedPanel(state: WorkspaceState): Panel | null {
   if (state.panels.length === 0) return null
   return state.panels.find((panel) => panel.id === state.focusedPanelId) ?? state.panels[0]!

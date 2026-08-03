@@ -16,25 +16,69 @@ focused.
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-## Layouts are presets, not a split tree
+## The layout is a split tree
 
-A recursive split tree (drag any edge, nest arbitrarily) is more powerful and much
-worse to use: every rearrangement becomes pixel-dragging, and layouts drift into
-shapes you didn't intend. The presets cover what's actually wanted:
+Arrangement lives in a binary tree of splits (`src/lib/layoutTree.ts`), not a fixed
+set of presets:
 
-| Preset | Slots | Grid |
-| --- | --- | --- |
-| Single | 1 | `1fr` |
-| Side by side | 2 | `1fr 1fr` |
-| Stacked | 2 | one column, two rows |
-| Three columns | 3 | `1fr 1fr 1fr` |
-| Quadrants | 4 | 2 × 2 |
-| Six | 6 | 3 × 2 |
-| Eight | 8 | 4 × 2 |
+```
+split(row, 0.5)
+├── leaf(session)
+└── split(column, 0.6)
+    ├── leaf(terminal)
+    └── leaf(terminal)
+```
 
-Adding a panel **grows the layout automatically** to the smallest preset that fits,
-and closing one shrinks it back. A preset with fewer slots than open panels is
-disabled in the picker rather than silently hiding a panel.
+Every split divides 100% of its parent, so the layout **always fills the viewport
+exactly** — no gaps, no overlap, whatever you drag it into. Presets could only offer
+the shapes someone predicted in advance.
+
+Every operation (`insertPanel`, `removePanel`, `movePanel`, `swapPanels`,
+`setRatio`) is **pure** and returns a new tree. Layout edits happen several times a
+second during a drag, so in-place mutation would make React miss updates and make an
+undo stack impossible to add later.
+
+Removing a panel **collapses its split** so the sibling takes the parent's place.
+Without that the tree accumulates splits with one empty side and the survivor
+renders at half size with dead space beside it.
+
+### Invariants are tested
+
+`npm test` checks the tree directly — the logic is pure, which is the point of
+keeping it out of the components. The load-bearing assertion is **coverage**: after
+any sequence of inserts, removes and moves, panel areas sum to exactly 1.
+
+```
+29 passed, 0 failed
+```
+
+## Rearranging
+
+**Drag a panel by its header.** The whole panel isn't draggable — that would fight
+selecting transcript text, clicking a tool call, and typing in a terminal — so the
+grab affordance is confined to the header strip.
+
+Drop zones, previewed with a translucent overlay before you commit:
+
+| Where you drop | Result |
+| --- | --- |
+| Outer third, any edge | Splits that panel on that side |
+| Middle | Swaps the two panels |
+
+**Drag a divider** to resize. The ratio is written straight to the DOM during the
+drag and only committed to the store on release — routing every pointer move through
+React state would re-render both subtrees, including live transcripts and terminal
+emulators, at pointer frequency.
+
+Ratios clamp to 12%/88% so a pane can't be dragged down to an unusable sliver, and
+the toolbar's grid button evens everything out again.
+
+### Why pointer events, not HTML5 drag-and-drop
+
+HTML5 DnD gives a browser-drawn ghost you can't style, coarse `dragover` throttling,
+and unreliable coordinates over nested children. Panels need a precise indicator
+that tracks the cursor across nested containers, so a pointer-down on the header
+captures the pointer and each move hit-tests via `elementFromPoint`.
 
 ## Focus is the load-bearing concept
 
@@ -79,7 +123,14 @@ missing. It's also why `node-pty` is in `dependencies` (shipped) and marked
 external in the main build, while `xterm` is a devDependency (bundled into the
 renderer).
 
-## Two behaviours worth knowing
+## Three behaviours worth knowing
+
+**The mosaic root must be a flex container.** The tree's root child sizes itself
+with `flex-1`, which does nothing inside a plain block — the layout then takes
+*content* height and leaves dead space below the panels. Measured coverage was 0.776
+before the fix and 0.954 after, the remainder being the 8px container padding and
+the dividers.
+
 
 **Terminal creation is idempotent.** A panel's id *is* its terminal's identity, and
 the component remounts more often than you'd expect — StrictMode double-invokes
@@ -88,11 +139,17 @@ PTY on the second call, which produced a spurious `[process exited with code 0]`
 two emulators writing to one PTY, and interleaved keystrokes (`c aecho ...`).
 `create()` now returns early when a live terminal already exists.
 
-**Scrollback survives layout changes.** Changing the layout unmounts and remounts
-panels, and a fresh xterm starts blank. Main retains ~200KB of output per terminal
-and the panel replays it on mount, so rearranging doesn't appear to wipe your
-shells. The PTY itself deliberately outlives the component — only closing the panel
-ends it.
+**Scrollback survives layout changes, without duplicating.** Changing the layout
+unmounts and remounts panels, and a fresh xterm starts blank. Main retains ~200KB
+per terminal and the panel replays it on mount.
+
+The subtlety: a mounting panel subscribes to live output *and* replays the buffer,
+so anything produced between spawn and replay lands twice — the shell's greeting
+appearing twice was the visible symptom. `terminal:snapshot` therefore returns the
+scrollback *and* the sequence number it covers, and the panel drops live events at
+or below it. Same idempotence pattern as session events.
+
+The PTY deliberately outlives the component — only closing the panel ends it.
 
 ## Process lifetime
 
@@ -113,4 +170,7 @@ pgrep -fl "zsh|bash" | grep -v login
 | `⇧⌘T` | New terminal panel |
 | `⌘W` | Close focused panel |
 | `⌘1`–`⌘9` | Focus panel by position |
+
+Rearranging is drag-only for now — there are no keyboard commands for moving a panel
+or resizing a split.
 | `⌘,` | Appearance |

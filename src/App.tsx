@@ -4,7 +4,7 @@ import { selectFocusedPanel, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useStreamBridge } from '@/hooks/useStreamBridge'
 import { api } from '@/lib/api'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
-import { PanelGrid } from '@/components/PanelGrid'
+import { PanelMosaic } from '@/components/PanelMosaic'
 import { MessageBar } from '@/components/MessageBar'
 import { StatusBar } from '@/components/StatusBar'
 import { SettingsDialog } from '@/components/SettingsDialog'
@@ -18,7 +18,7 @@ export function App() {
   const layout = useWorkspaceStore((state) => state.layout)
   const focusedPanelId = useWorkspaceStore((state) => state.focusedPanelId)
   const focusedPanel = useWorkspaceStore(selectFocusedPanel)
-  const { setLayout, focusPanel, addPanel, closePanel } = useWorkspaceStore.getState()
+  const { focusPanel, addPanel, closePanel, balanceLayout } = useWorkspaceStore.getState()
 
   const tabs = useSessionStore((state) => state.tabs)
   const { send, interrupt, setPermissionMode } = useSessionStore.getState()
@@ -77,11 +77,10 @@ export function App() {
   return (
     <div className="flex h-full flex-col bg-bg">
       <WorkspaceBar
-        layout={layout}
         panelCount={panels.length}
-        onLayout={setLayout}
-        onAddSession={() => void addPanel('session')}
-        onAddTerminal={() => void addPanel('terminal')}
+        onAddSession={(direction) => void addPanel('session', { direction })}
+        onAddTerminal={(direction) => void addPanel('terminal', { direction })}
+        onBalance={balanceLayout}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -93,7 +92,7 @@ export function App() {
         />
       ) : (
         <>
-          <PanelGrid
+          <PanelMosaic
             panels={panels}
             layout={layout}
             focusedPanelId={focusedPanel?.id ?? null}

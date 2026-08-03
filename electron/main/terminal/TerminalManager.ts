@@ -61,6 +61,8 @@ type Terminal = {
   process: PtyProcess
   /** Output retained for replay into a remounted panel. */
   scrollback: string
+  /** Seq of the most recent event emitted for this terminal. */
+  lastSeq: number
   /** Pending output, flushed once per frame. */
   pending: string
   timer: NodeJS.Timeout | null
@@ -127,6 +129,7 @@ export class TerminalManager {
       id,
       process: child,
       scrollback: '',
+      lastSeq: 0,
       pending: '',
       timer: null,
       exited: false,
@@ -157,9 +160,21 @@ export class TerminalManager {
     }
   }
 
-  /** Retained output, for replay into a freshly mounted panel. */
-  scrollback(id: string): string {
-    return this.terminals.get(id)?.scrollback ?? ''
+  /**
+   * Retained output plus the sequence number it covers.
+   *
+   * The seq matters: a mounting panel subscribes to live output *and* replays this
+   * buffer, so without a watermark the output produced between spawn and replay
+   * lands twice (a shell's greeting appearing twice was the visible symptom). The
+   * caller ignores any live event at or below `seq`.
+   */
+  snapshot(id: string): { scrollback: string; seq: number } {
+    const terminal = this.terminals.get(id)
+    if (!terminal) return { scrollback: '', seq: 0 }
+    // Flush first so the snapshot includes everything already produced, rather
+    // than leaving a frame's worth to arrive live and land before the replay.
+    this.flush(terminal)
+    return { scrollback: terminal.scrollback, seq: terminal.lastSeq }
   }
 
   has(id: string): boolean {
@@ -211,13 +226,16 @@ export class TerminalManager {
 
     const data = terminal.pending
     terminal.pending = ''
-    this.send({ kind: 'data', id: terminal.id, data })
+    terminal.lastSeq = this.send({ kind: 'data', id: terminal.id, data })
   }
 
-  private send(payload: UnsequencedTerminalEvent): void {
-    const contents = this.getWebContents()
-    if (!contents || contents.isDestroyed()) return
+  /** Returns the seq stamped on the emitted event. */
+  private send(payload: UnsequencedTerminalEvent): number {
     this.seq += 1
-    contents.send(TERMINAL_CHANNEL, { ...payload, seq: this.seq })
+    const contents = this.getWebContents()
+    if (contents && !contents.isDestroyed()) {
+      contents.send(TERMINAL_CHANNEL, { ...payload, seq: this.seq })
+    }
+    return this.seq
   }
 }

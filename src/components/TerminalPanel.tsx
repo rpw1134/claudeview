@@ -42,6 +42,12 @@ export function TerminalPanel({
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  /**
+   * Seq covered by the replayed snapshot. Live events at or below it were already
+   * included in that replay and must be dropped, or the shell's startup output is
+   * written twice.
+   */
+  const replayedThroughRef = useRef(0)
 
   const font = useAppearanceStore((state) => state.font)
   const fontSize = useAppearanceStore((state) => state.fontSize)
@@ -88,9 +94,12 @@ export function TerminalPanel({
       })
       if (disposed) return
 
-      // Restore what was on screen before this panel was remounted.
-      const scrollback = await api['terminal:scrollback']({ id: terminalId })
-      if (!disposed && scrollback) term.write(scrollback)
+      // Restore what was on screen before this panel was remounted. The snapshot
+      // reports which events it already contains so the live stream can skip them.
+      const snapshot = await api['terminal:snapshot']({ id: terminalId })
+      if (disposed) return
+      replayedThroughRef.current = snapshot.seq
+      if (snapshot.scrollback) term.write(snapshot.scrollback)
     }
     void start()
 
@@ -127,6 +136,8 @@ export function TerminalPanel({
   useEffect(() => {
     const unsubscribe = api.onTerminalEvent((envelope) => {
       if (envelope.id !== terminalId) return
+      // Already included in the replayed snapshot.
+      if (envelope.seq <= replayedThroughRef.current) return
       const term = termRef.current
       if (!term) return
 

@@ -213,8 +213,11 @@ export type IpcCalls = {
   'terminal:write': [{ id: string; data: string }, void]
   'terminal:resize': [{ id: string; cols: number; rows: number }, void]
   'terminal:close': [{ id: string }, void]
-  /** Retained output, replayed when a panel remounts after a layout change. */
-  'terminal:scrollback': [{ id: string }, string]
+  /**
+   * Retained output plus the seq it covers, for replay when a panel mounts.
+   * Live events at or below that seq must be ignored, or they render twice.
+   */
+  'terminal:snapshot': [{ id: string }, { scrollback: string; seq: number }]
   'app:info': [void, { cwd: string; version: string; home: string }]
 }
 

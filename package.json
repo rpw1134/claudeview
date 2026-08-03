@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "dist": "npm run build && electron-builder",
     "rebuild:native": "electron-rebuild -f -w node-pty",
-    "postinstall": "electron-rebuild -f -w node-pty"
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "test": "vite build --config test/vite.config.ts --logLevel error && node .test-dist/layoutTree.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
