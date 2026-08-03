@@ -1,17 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CornerDownLeft, Square } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 import type { SessionStatus } from '@shared/ipc'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
 
-const MAX_HEIGHT_PX = 200
+/** Cap before the textarea scrolls internally. On the 8pt scale. */
+const MAX_HEIGHT_PX = 192
+/** Single-row height. Matches the send button exactly — see the note below. */
+const MIN_HEIGHT_PX = 36
 
 /**
  * Message input.
  *
- * Sending is allowed even while the model is mid-response: the SDK queues user
- * turns and processes them in order, so there's no reason to disable the control
- * and force the user to wait for a turn to finish before typing a correction.
+ * ## The vertical alignment
+ *
+ * The old version looked visibly off: text sat closer to the bottom edge than the
+ * top. The cause was a height mismatch — a 36px button and a ~30px single-row
+ * textarea inside an `items-end` row. The button drove the row height, the shorter
+ * textarea was pinned to the bottom, and the leftover space all collected above it.
+ *
+ * The fix is to make the two the same height rather than to nudge padding:
+ * `line-height: 20px + 8px padding × 2 = 36px`, which equals the button's `h-9`.
+ * Both children are then exactly 8px (the shell's padding) from every shell edge,
+ * so the optical spacing is symmetric on all four sides.
+ *
+ * ## One boundary, not three
+ *
+ * The shell carries the only border in this region. The old version had a border
+ * on the wrapper *and* the shell, which read as a box inside a box. The wrapper now
+ * separates itself with a fill change plus a single hairline rule.
  */
 export function Composer({
   status,
@@ -29,12 +46,11 @@ export function Composer({
 
   const isBusy = status === 'thinking' || status === 'streaming' || status === 'tool'
 
-  // Grow with content up to a cap, then scroll internally.
   useEffect(() => {
     const element = textareaRef.current
     if (!element) return
     element.style.height = 'auto'
-    element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`
+    element.style.height = `${Math.min(Math.max(element.scrollHeight, MIN_HEIGHT_PX), MAX_HEIGHT_PX)}px`
   }, [value])
 
   const submit = useCallback(() => {
@@ -42,19 +58,16 @@ export function Composer({
     if (!text || disabled) return
     onSend(text)
     setValue('')
-    // Return focus so a rapid follow-up doesn't require reaching for the mouse.
     requestAnimationFrame(() => textareaRef.current?.focus())
   }, [value, disabled, onSend])
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Enter sends, Shift+Enter inserts a newline — the convention for chat inputs.
       if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
         event.preventDefault()
         submit()
         return
       }
-      // Escape stops the current turn without losing what's been typed.
       if (event.key === 'Escape' && isBusy) {
         event.preventDefault()
         onInterrupt()
@@ -63,13 +76,27 @@ export function Composer({
     [submit, isBusy, onInterrupt],
   )
 
+  const canSend = value.trim().length > 0 && !disabled
+
   return (
-    <div className="shrink-0 border-t border-border bg-surface px-4 py-3">
-      <div className="mx-auto w-full max-w-[calc(var(--measure)+8rem)]">
+    <div className="shrink-0 border-t border-line bg-surface py-4">
+      {/*
+        Padding sits on the max-width box, not the full-width wrapper — exactly as
+        in Transcript. Putting it on the wrapper instead makes this box 32px wider
+        per side than the prose column, so the input visibly fails to line up with
+        the text above it.
+      */}
+      <div className="mx-auto w-full max-w-[calc(var(--measure)+8rem)] px-8">
+        {/*
+          `items-end` keeps the button on the last line as the textarea grows.
+          Shell padding is a uniform 8px; both children are 36px tall at rest.
+        */}
         <div
           className={cn(
-            'flex items-end gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2',
-            'transition-colors focus-within:border-accent',
+            'flex items-end gap-2 rounded-xl border p-2 transition-colors duration-150',
+            'bg-raised',
+            // A real control boundary, so it clears the 3:1 non-text threshold.
+            'border-line-strong focus-within:border-accent',
             disabled && 'opacity-50',
           )}
         >
@@ -82,8 +109,9 @@ export function Composer({
             rows={1}
             placeholder={isBusy ? 'Queue a follow-up…' : 'Send a message…'}
             aria-label="Message"
-            className="flex-1 resize-none border-none bg-transparent py-1 text-sm text-text
-                       outline-none placeholder:text-text-faint"
+            style={{ minHeight: MIN_HEIGHT_PX }}
+            className="flex-1 resize-none border-none bg-transparent px-2 py-2 text-[0.95rem]
+                       leading-5 text-text outline-none placeholder:text-text-faint"
           />
 
           {isBusy ? (
@@ -94,32 +122,32 @@ export function Composer({
               aria-label="Stop generating"
               title="Stop (Esc)"
             >
-              <Square size={13} className="fill-current" />
+              <Square size={12} className="fill-current" />
             </Button>
           ) : (
             <Button
               variant="primary"
               size="icon-lg"
               onClick={submit}
-              disabled={!value.trim() || disabled}
+              disabled={!canSend}
               aria-label="Send message"
               title="Send (Enter)"
             >
-              <CornerDownLeft size={14} />
+              <ArrowUp size={16} />
             </Button>
           )}
         </div>
 
-        <div className="mt-1.5 px-1 text-[10px] text-text-faint">
+        <p className="mt-2 px-4 text-xs text-text-faint">
           <kbd className="font-mono">Enter</kbd> to send ·{' '}
           <kbd className="font-mono">Shift+Enter</kbd> for newline
           {isBusy ? (
             <>
-              {' '}
-              · <kbd className="font-mono">Esc</kbd> to stop
+              {' · '}
+              <kbd className="font-mono">Esc</kbd> to stop
             </>
           ) : null}
-        </div>
+        </p>
       </div>
     </div>
   )

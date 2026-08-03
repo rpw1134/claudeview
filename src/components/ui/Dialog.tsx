@@ -12,8 +12,12 @@ export const DialogClose = DialogPrimitive.Close
  *
  * Radix handles the three focus rules a dialog must satisfy — move focus in on
  * open, trap it while open, restore it to the trigger on close — plus the ARIA
- * wiring. `DialogTitle` is required by the primitive for accessible naming, so
- * every call site is forced to supply one.
+ * wiring. `title` is required by the primitive for accessible naming, so every
+ * call site is forced to supply one.
+ *
+ * Elevation, not outline, marks it as floating: a dimmed backdrop plus the
+ * `overlay` fill and a shadow. Figure–ground separation is the dialog's whole job,
+ * and that's what the backdrop is for.
  */
 export function DialogContent({
   className,
@@ -27,17 +31,17 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[min(38rem,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2',
-          'max-h-[min(42rem,calc(100vh-6rem))] overflow-y-auto',
-          'rounded-xl border border-border bg-surface p-5 shadow-2xl',
+          'fixed left-1/2 top-1/2 z-50 w-[min(34rem,calc(100vw-4rem))] -translate-x-1/2 -translate-y-1/2',
+          'max-h-[min(44rem,calc(100vh-8rem))] overflow-y-auto',
+          'rounded-xl bg-overlay p-6 shadow-2xl',
           className,
         )}
         {...props}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <DialogPrimitive.Title className="text-sm font-semibold text-text">
               {title}

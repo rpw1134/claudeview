@@ -3,7 +3,7 @@ import type { PermissionMode, SessionStatus } from '@shared/ipc'
 import type { Tab } from '@/types/session'
 import { formatCost, shortenPath } from '@/lib/utils'
 import { Button } from './ui/Button'
-import { Select } from './ui/Field'
+import { cn } from '@/lib/utils'
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
   starting: 'Starting…',
@@ -28,9 +28,14 @@ const PERMISSION_OPTIONS: { value: PermissionMode; label: string }[] = [
 /**
  * Session state, always visible.
  *
- * Permission mode lives here rather than buried in settings because it is the one
- * setting whose current value changes what the agent is allowed to do to your
- * machine — that should never require a click to discover.
+ * The whole bar is tertiary information, so it sits at `text-faint`/`text-muted`
+ * and carries no borders of its own — a hairline separates it from the transcript
+ * and that's the entire boundary budget for this region.
+ *
+ * Permission mode lives here rather than in settings because it's the one setting
+ * that changes what the agent may do to your machine; that should never require a
+ * click to discover. It's rendered borderless until hover so it doesn't read as a
+ * third focal point in a 32px-tall strip.
  */
 export function StatusBar({
   tab,
@@ -43,18 +48,20 @@ export function StatusBar({
   onPermissionModeChange: (mode: PermissionMode) => void
   onOpenSettings: () => void
 }) {
+  const isRisky = tab.permissionMode === 'bypassPermissions' || tab.permissionMode === 'dontAsk'
+
   return (
-    <div className="flex h-8 shrink-0 items-center gap-3 border-t border-border bg-surface px-3 text-[11px] text-text-muted">
-      <span className="shrink-0 font-medium text-text">{STATUS_LABEL[tab.status]}</span>
+    <div className="flex h-8 shrink-0 items-center gap-4 border-t border-line bg-surface px-4 text-xs text-text-faint">
+      <span className="shrink-0 text-text-muted">{STATUS_LABEL[tab.status]}</span>
 
       {tab.cwd ? (
-        <span className="flex min-w-0 shrink items-center gap-1" title={tab.cwd}>
-          <FolderOpen size={11} className="shrink-0" />
+        <span className="flex min-w-0 shrink items-center gap-2" title={tab.cwd}>
+          <FolderOpen size={12} className="shrink-0" />
           <span className="truncate font-mono">{shortenPath(tab.cwd, home)}</span>
         </span>
       ) : null}
 
-      {tab.model ? <span className="shrink-0 font-mono">{tab.model}</span> : null}
+      {tab.model ? <span className="shrink-0 truncate font-mono">{tab.model}</span> : null}
 
       {tab.totalCostUsd > 0 ? (
         <span className="shrink-0 font-mono" title="Total session cost">
@@ -63,25 +70,44 @@ export function StatusBar({
       ) : null}
 
       {tab.lastError ? (
-        <span className="flex min-w-0 items-center gap-1 text-danger" title={tab.lastError}>
-          <AlertTriangle size={11} className="shrink-0" />
+        <span className="flex min-w-0 items-center gap-2 text-danger" title={tab.lastError}>
+          <AlertTriangle size={12} className="shrink-0" />
           <span className="truncate">{tab.lastError}</span>
         </span>
       ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <label className="flex items-center gap-1.5">
-          <span className="text-text-faint">Permissions</span>
-          <Select
-            value={tab.permissionMode}
-            onChange={(value) => onPermissionModeChange(value as PermissionMode)}
-            options={PERMISSION_OPTIONS}
-            className="h-6 w-32 text-[11px]"
-          />
-        </label>
+        {/*
+          Borderless until hover. A permanently outlined control in a 32px strip
+          reads as a competing focal point; the label to its left already says
+          what it is. Risky modes tint the text — colour plus the visible mode
+          name, never colour alone.
+        */}
+        <select
+          aria-label="Permission mode"
+          value={tab.permissionMode}
+          onChange={(event) => onPermissionModeChange(event.target.value as PermissionMode)}
+          className={cn(
+            'h-6 rounded-sm border border-transparent bg-transparent px-2 text-xs',
+            'transition-colors hover:border-line hover:bg-raised',
+            isRisky ? 'text-warning' : 'text-text-muted',
+          )}
+        >
+          {PERMISSION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
 
-        <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Appearance settings">
-          <Settings2 size={13} />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenSettings}
+          aria-label="Appearance settings"
+          title="Appearance (⌘,)"
+        >
+          <Settings2 size={14} />
         </Button>
       </div>
     </div>

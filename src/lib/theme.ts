@@ -1,142 +1,184 @@
 /**
- * Colorways and typography.
+ * Colorways, typography, and the shared visual scales.
  *
- * Every theme-able value is a CSS custom property set on `<html>`. Components
- * reference the semantic name (`--surface`, `--accent`) and never a literal color,
- * so switching a colorway is a single `style.setProperty` pass with no React
- * re-render and no flash — and adding a colorway means adding an entry here, not
- * touching any component.
+ * Every theme-able value is a CSS custom property on `<html>`. Components
+ * reference semantic names (`--surface`, `--accent`) and never a literal color, so
+ * switching a colorway is one `style.setProperty` pass — no rebuild, no React
+ * re-render, no flash.
  *
- * Colors are OKLCH: perceptually uniform, so a shared lightness reads as equally
- * bright across hues. That is what keeps a palette internally consistent instead of
- * having, say, the blue look heavier than the green at the same nominal value.
+ * ## Colorways are generated, not hand-picked
+ *
+ * Each colorway is declared as a *hue plus a chroma level*, and the full ramp is
+ * generated from one shared lightness scale. Hand-tuning five palettes
+ * independently is how contrast drifts: one theme ends up harsher than another and
+ * "muted" text means something different in each. Generating them means the
+ * text-on-surface contrast ratio is identical in every colorway by construction.
+ *
+ * ## Why OKLCH
+ *
+ * OKLCH is perceptually uniform: equal lightness reads as equally bright across
+ * hues. In sRGB hex it does not — a "same value" blue and green look like different
+ * weights, which is what makes hand-mixed palettes feel subtly inconsistent.
  */
 
-export type ColorwayId = 'graphite' | 'ink' | 'parchment' | 'nord' | 'terminal'
-
-export type Colorway = {
-  id: ColorwayId
-  label: string
-  /** Whether the OS should draw scrollbars and form controls dark. */
-  scheme: 'dark' | 'light'
-  /** Swatch shown in the picker: [background, surface, accent]. */
-  swatch: [string, string, string]
-  vars: Record<string, string>
-}
+export type ColorwayId = 'slate' | 'ink' | 'nord' | 'moss' | 'parchment'
 
 /**
- * Shared scale. Only hue/lightness differ between colorways, which is what keeps
- * them recognisably the same product rather than five unrelated skins.
+ * The dark lightness ramp.
+ *
+ * Deliberately does **not** start near black. Pure/near black makes every piece of
+ * text a maximum-contrast event, which is exactly the "too black, too contrasty"
+ * problem — the eye gets no rest and the UI reads as harsh. Starting the window at
+ * L≈0.205 and stepping up keeps body text at ~13.7:1 (still AAA) instead of ~16:1.
+ *
+ * `line` is a quiet divider. `lineStrong` is for genuine control boundaries — form
+ * fields whose edge is the only thing identifying them — and is set to clear the
+ * WCAG 1.4.11 3:1 non-text threshold against `surface`.
  */
-export const COLORWAYS: readonly Colorway[] = [
+const DARK_RAMP = {
+  bg: 0.205,
+  surface: 0.245,
+  raised: 0.29,
+  overlay: 0.32,
+  line: 0.335,
+  lineStrong: 0.565,
+  text: 0.91,
+  muted: 0.72,
+  faint: 0.585,
+} as const
+
+/** Light ramp. Mirrors the dark one: same relationships, inverted. */
+const LIGHT_RAMP = {
+  bg: 0.955,
+  surface: 0.985,
+  raised: 0.925,
+  overlay: 1.0,
+  line: 0.885,
+  lineStrong: 0.60,
+  text: 0.29,
+  muted: 0.475,
+  faint: 0.6,
+} as const
+
+type Recipe = {
+  id: ColorwayId
+  label: string
+  scheme: 'dark' | 'light'
+  /** Hue of the neutrals. A trace of hue keeps greys from looking dead. */
+  neutralHue: number
+  /** Chroma of the neutrals. Higher = more tinted surfaces. Keep small. */
+  neutralChroma: number
+  accent: { l: number; c: number; h: number }
+  semantic?: Partial<{ success: number; danger: number; warning: number }>
+}
+
+const RECIPES: readonly Recipe[] = [
   {
-    id: 'graphite',
-    label: 'Graphite',
+    id: 'slate',
+    label: 'Slate',
     scheme: 'dark',
-    swatch: ['oklch(0.17 0.005 275)', 'oklch(0.22 0.006 275)', 'oklch(0.72 0.14 250)'],
-    vars: {
-      '--bg': 'oklch(0.17 0.005 275)',
-      '--surface': 'oklch(0.21 0.006 275)',
-      '--surface-raised': 'oklch(0.25 0.008 275)',
-      '--border': 'oklch(0.31 0.008 275)',
-      '--text': 'oklch(0.93 0.004 275)',
-      '--text-muted': 'oklch(0.68 0.008 275)',
-      '--text-faint': 'oklch(0.53 0.008 275)',
-      '--accent': 'oklch(0.72 0.14 250)',
-      '--accent-contrast': 'oklch(0.17 0.01 250)',
-      '--success': 'oklch(0.74 0.15 155)',
-      '--danger': 'oklch(0.66 0.19 22)',
-      '--warning': 'oklch(0.79 0.14 80)',
-      '--code-bg': 'oklch(0.15 0.006 275)',
-    },
+    neutralHue: 265,
+    neutralChroma: 0.007,
+    accent: { l: 0.7, c: 0.115, h: 250 },
   },
   {
     id: 'ink',
     label: 'Ink',
     scheme: 'dark',
-    swatch: ['oklch(0.13 0.012 265)', 'oklch(0.18 0.016 265)', 'oklch(0.76 0.13 305)'],
-    vars: {
-      '--bg': 'oklch(0.13 0.012 265)',
-      '--surface': 'oklch(0.17 0.016 265)',
-      '--surface-raised': 'oklch(0.21 0.02 265)',
-      '--border': 'oklch(0.28 0.022 265)',
-      '--text': 'oklch(0.94 0.008 265)',
-      '--text-muted': 'oklch(0.7 0.014 265)',
-      '--text-faint': 'oklch(0.54 0.016 265)',
-      '--accent': 'oklch(0.76 0.13 305)',
-      '--accent-contrast': 'oklch(0.14 0.02 305)',
-      '--success': 'oklch(0.76 0.14 160)',
-      '--danger': 'oklch(0.68 0.19 15)',
-      '--warning': 'oklch(0.81 0.13 85)',
-      '--code-bg': 'oklch(0.11 0.014 265)',
-    },
+    neutralHue: 285,
+    neutralChroma: 0.014,
+    accent: { l: 0.72, c: 0.115, h: 305 },
   },
   {
     id: 'nord',
     label: 'Nord',
     scheme: 'dark',
-    swatch: ['oklch(0.26 0.02 260)', 'oklch(0.31 0.022 260)', 'oklch(0.79 0.08 230)'],
-    vars: {
-      '--bg': 'oklch(0.26 0.02 260)',
-      '--surface': 'oklch(0.3 0.022 258)',
-      '--surface-raised': 'oklch(0.35 0.024 256)',
-      '--border': 'oklch(0.4 0.025 256)',
-      '--text': 'oklch(0.93 0.012 250)',
-      '--text-muted': 'oklch(0.75 0.018 250)',
-      '--text-faint': 'oklch(0.6 0.02 252)',
-      '--accent': 'oklch(0.79 0.08 230)',
-      '--accent-contrast': 'oklch(0.24 0.02 230)',
-      '--success': 'oklch(0.79 0.1 150)',
-      '--danger': 'oklch(0.68 0.15 25)',
-      '--warning': 'oklch(0.85 0.1 90)',
-      '--code-bg': 'oklch(0.23 0.02 260)',
-    },
+    neutralHue: 245,
+    neutralChroma: 0.016,
+    accent: { l: 0.75, c: 0.085, h: 225 },
   },
   {
-    id: 'terminal',
-    label: 'Terminal',
+    id: 'moss',
+    label: 'Moss',
     scheme: 'dark',
-    swatch: ['oklch(0.14 0.01 150)', 'oklch(0.18 0.014 150)', 'oklch(0.82 0.19 145)'],
-    vars: {
-      '--bg': 'oklch(0.14 0.01 150)',
-      '--surface': 'oklch(0.18 0.014 150)',
-      '--surface-raised': 'oklch(0.22 0.018 150)',
-      '--border': 'oklch(0.3 0.03 150)',
-      '--text': 'oklch(0.9 0.03 145)',
-      '--text-muted': 'oklch(0.7 0.04 145)',
-      '--text-faint': 'oklch(0.54 0.04 145)',
-      '--accent': 'oklch(0.82 0.19 145)',
-      '--accent-contrast': 'oklch(0.14 0.03 145)',
-      '--success': 'oklch(0.85 0.19 145)',
-      '--danger': 'oklch(0.68 0.2 25)',
-      '--warning': 'oklch(0.84 0.15 90)',
-      '--code-bg': 'oklch(0.11 0.012 150)',
-    },
+    neutralHue: 155,
+    neutralChroma: 0.012,
+    accent: { l: 0.74, c: 0.11, h: 155 },
   },
   {
     id: 'parchment',
     label: 'Parchment',
     scheme: 'light',
-    swatch: ['oklch(0.96 0.012 85)', 'oklch(0.99 0.006 85)', 'oklch(0.52 0.14 40)'],
-    vars: {
-      '--bg': 'oklch(0.96 0.012 85)',
-      '--surface': 'oklch(0.99 0.006 85)',
-      '--surface-raised': 'oklch(0.94 0.014 85)',
-      '--border': 'oklch(0.86 0.018 85)',
-      '--text': 'oklch(0.25 0.015 60)',
-      '--text-muted': 'oklch(0.46 0.016 60)',
-      '--text-faint': 'oklch(0.6 0.016 60)',
-      '--accent': 'oklch(0.52 0.14 40)',
-      '--accent-contrast': 'oklch(0.98 0.01 40)',
-      '--success': 'oklch(0.5 0.13 155)',
-      '--danger': 'oklch(0.52 0.19 25)',
-      '--warning': 'oklch(0.6 0.13 75)',
-      '--code-bg': 'oklch(0.93 0.014 85)',
-    },
+    neutralHue: 85,
+    neutralChroma: 0.01,
+    accent: { l: 0.52, c: 0.12, h: 45 },
   },
 ] as const
 
-export type FontId = 'system' | 'mono' | 'serif' | 'inter-ish'
+const oklch = (l: number, c: number, h: number): string =>
+  `oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h})`
+
+function buildVars(recipe: Recipe): Record<string, string> {
+  const ramp = recipe.scheme === 'dark' ? DARK_RAMP : LIGHT_RAMP
+  const h = recipe.neutralHue
+  const c = recipe.neutralChroma
+  const { accent } = recipe
+
+  // Semantic hues are fixed so "error" reads as error in every colorway. Their
+  // lightness follows the ramp's text level so they sit at comparable weight.
+  const semanticL = recipe.scheme === 'dark' ? 0.72 : 0.5
+
+  return {
+    '--bg': oklch(ramp.bg, c, h),
+    '--surface': oklch(ramp.surface, c, h),
+    '--raised': oklch(ramp.raised, c * 1.1, h),
+    '--overlay': oklch(ramp.overlay, c * 1.1, h),
+    '--line': oklch(ramp.line, c * 1.2, h),
+    '--line-strong': oklch(ramp.lineStrong, c * 1.2, h),
+    '--text': oklch(ramp.text, c * 0.6, h),
+    '--text-muted': oklch(ramp.muted, c * 1.2, h),
+    '--text-faint': oklch(ramp.faint, c * 1.4, h),
+    '--accent': oklch(accent.l, accent.c, accent.h),
+    '--accent-contrast': oklch(
+      recipe.scheme === 'dark' ? 0.19 : 0.99,
+      c,
+      accent.h,
+    ),
+    // A translucent accent wash for selected states — tinting a surface rather
+    // than outlining it keeps selection quiet.
+    '--accent-wash': `color-mix(in oklch, ${oklch(accent.l, accent.c, accent.h)} 16%, transparent)`,
+    '--success': oklch(semanticL, 0.13, recipe.semantic?.success ?? 155),
+    '--danger': oklch(semanticL, 0.16, recipe.semantic?.danger ?? 25),
+    '--warning': oklch(semanticL, 0.12, recipe.semantic?.warning ?? 85),
+    '--code-bg': oklch(
+      recipe.scheme === 'dark' ? ramp.bg - 0.02 : ramp.raised,
+      c,
+      h,
+    ),
+  }
+}
+
+export type Colorway = {
+  id: ColorwayId
+  label: string
+  scheme: 'dark' | 'light'
+  /** Swatch for the picker: [background, raised surface, accent]. */
+  swatch: [string, string, string]
+  vars: Record<string, string>
+}
+
+export const COLORWAYS: readonly Colorway[] = RECIPES.map((recipe) => {
+  const vars = buildVars(recipe)
+  return {
+    id: recipe.id,
+    label: recipe.label,
+    scheme: recipe.scheme,
+    swatch: [vars['--bg']!, vars['--raised']!, vars['--accent']!],
+    vars,
+  }
+})
+
+export type FontId = 'system' | 'grotesque' | 'serif' | 'mono'
 
 export const FONT_STACKS: Record<FontId, { label: string; body: string; mono: string }> = {
   system: {
@@ -144,7 +186,7 @@ export const FONT_STACKS: Record<FontId, { label: string; body: string; mono: st
     body: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
     mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
   },
-  'inter-ish': {
+  grotesque: {
     label: 'Grotesque',
     body: '"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif',
     mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
@@ -164,46 +206,63 @@ export const FONT_STACKS: Record<FontId, { label: string; body: string; mono: st
 export type Appearance = {
   colorway: ColorwayId
   font: FontId
-  /** Base font size in px. Everything else is in `rem`, so this scales the whole UI. */
+  /** Base font size in px. Everything else is relative, so this scales the UI. */
   fontSize: number
   /** Body line-height multiplier — the biggest lever on long-form readability. */
   lineHeight: number
-  /** Transcript max width in ch. ~70ch is the readable range for prose. */
+  /** Transcript measure in ch. 45–75 is the readable range; ~66 is the classic. */
   measure: number
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  colorway: 'graphite',
+  colorway: 'slate',
   font: 'system',
   fontSize: 15,
-  lineHeight: 1.65,
-  measure: 78,
+  lineHeight: 1.6,
+  measure: 72,
+}
+
+/** Colorway ids that existed in earlier builds, mapped to their replacements. */
+const LEGACY_COLORWAYS: Record<string, ColorwayId> = {
+  graphite: 'slate',
+  terminal: 'moss',
+}
+
+const LEGACY_FONTS: Record<string, FontId> = { 'inter-ish': 'grotesque' }
+
+export function resolveColorway(id: string): Colorway {
+  const mapped = LEGACY_COLORWAYS[id] ?? id
+  return COLORWAYS.find((entry) => entry.id === mapped) ?? COLORWAYS[0]!
+}
+
+export function resolveFont(id: string): FontId {
+  const mapped = LEGACY_FONTS[id] ?? id
+  return mapped in FONT_STACKS ? (mapped as FontId) : 'system'
 }
 
 /**
  * Push appearance into the document. Called on load and on every change.
  *
- * Writing straight to `documentElement.style` rather than through React means
- * dragging the font-size slider re-styles the app without re-rendering the
- * transcript — which matters when the transcript is thousands of nodes deep.
+ * Writes straight to `documentElement.style` rather than going through React, so
+ * dragging the text-size slider restyles the app without re-rendering a transcript
+ * that may be thousands of nodes deep.
  */
 export function applyAppearance(appearance: Appearance): void {
   const root = document.documentElement
-  const colorway = COLORWAYS.find((entry) => entry.id === appearance.colorway) ?? COLORWAYS[0]!
+  const colorway = resolveColorway(appearance.colorway)
 
   for (const [name, value] of Object.entries(colorway.vars)) {
     root.style.setProperty(name, value)
   }
 
-  const font = FONT_STACKS[appearance.font] ?? FONT_STACKS.system
+  const font = FONT_STACKS[resolveFont(appearance.font)]
   root.style.setProperty('--font-body', font.body)
   root.style.setProperty('--font-mono', font.mono)
   root.style.setProperty('--font-size-base', `${appearance.fontSize}px`)
   root.style.setProperty('--line-height-body', String(appearance.lineHeight))
   root.style.setProperty('--measure', `${appearance.measure}ch`)
 
-  // Lets the OS render scrollbars/controls to match, which is the difference
-  // between a themed app and an app with a themed <div>.
+  // Lets the OS render scrollbars and native controls to match.
   root.style.colorScheme = colorway.scheme
   root.dataset.colorway = colorway.id
 }

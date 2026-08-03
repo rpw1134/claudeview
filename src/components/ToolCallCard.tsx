@@ -33,11 +33,17 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
 /**
  * A tool call, collapsed by default.
  *
- * Tool traffic is the bulk of an agentic session by volume but rarely what the user
- * is reading — they want the prose, with the option to inspect what happened.
- * Collapsed-with-a-one-line-summary keeps the transcript scannable; the summary line
- * carries the single most identifying argument (the command, the path, the pattern)
- * so it's usually enough on its own.
+ * ## Why this recedes
+ *
+ * Tool traffic is most of an agentic session by volume and almost never what you
+ * are actually reading — the prose is. The old version gave every tool call a
+ * bordered card, so a screen of tool calls out-shouted the answer sitting between
+ * them. Emphasis is relative: making the transcript readable means actively
+ * suppressing this, not just leaving it unstyled.
+ *
+ * So: no border, no fill at rest. It's a quiet row that gains a fill on hover and
+ * only becomes a real surface once expanded. The expanded body is separated by a
+ * hairline rule rather than by nesting a second bordered box inside the first.
  */
 export const ToolCallCard = memo(function ToolCallCard({
   item,
@@ -51,45 +57,45 @@ export const ToolCallCard = memo(function ToolCallCard({
   const summary = summarizeInput(item.input)
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-lg border border-border bg-surface/60">
-      <div className="flex items-center gap-2 px-2.5 py-1.5">
+    <div
+      className={cn(
+        '-mx-3 my-1 overflow-hidden rounded-lg transition-colors duration-150',
+        expanded ? 'bg-surface' : 'hover:bg-surface',
+      )}
+    >
+      <div className="flex items-center gap-2 px-3 py-2">
         <button
           onClick={() => setExpanded((value) => !value)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-expanded={expanded}
         >
           <ChevronRight
-            size={13}
+            size={14}
             className={cn(
               'shrink-0 text-text-faint transition-transform duration-150',
               expanded && 'rotate-90',
             )}
           />
-          <Icon size={13} className="shrink-0 text-text-muted" />
-          <span className="shrink-0 font-mono text-xs font-medium text-text">{item.name}</span>
+          <Icon size={14} className="shrink-0 text-text-faint" />
+          <span className="shrink-0 font-mono text-xs text-text-muted">{item.name}</span>
           {summary ? (
-            <span className="truncate font-mono text-[11px] text-text-faint">{summary}</span>
+            <span className="truncate font-mono text-xs text-text-faint">{summary}</span>
           ) : null}
         </button>
 
         <StatusGlyph status={item.status} />
 
         {item.spawnedLaneId && onOpenLane ? (
-          <Button
-            size="sm"
-            variant="subtle"
-            onClick={() => onOpenLane(item.spawnedLaneId!)}
-            className="shrink-0"
-          >
-            Open transcript
+          <Button size="sm" variant="subtle" onClick={() => onOpenLane(item.spawnedLaneId!)}>
+            Open
           </Button>
         ) : null}
       </div>
 
       {expanded ? (
-        <div className="border-t border-border bg-code-bg/60 px-2.5 py-2">
+        <div className="border-t border-line px-3 py-3" data-selectable>
           <Section label="Input">
-            <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed text-text-muted">
+            <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-text-muted">
               {formatValue(item.input)}
             </pre>
           </Section>
@@ -97,7 +103,7 @@ export const ToolCallCard = memo(function ToolCallCard({
             <Section label={item.status === 'error' ? 'Error' : 'Result'}>
               <pre
                 className={cn(
-                  'max-h-72 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed',
+                  'max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-relaxed',
                   item.status === 'error' ? 'text-danger' : 'text-text-muted',
                 )}
               >
@@ -111,10 +117,11 @@ export const ToolCallCard = memo(function ToolCallCard({
   )
 })
 
+/** Label + content. Grouped by proximity and a faint label — no box required. */
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-2 last:mb-0" data-selectable>
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+    <div className="mb-3 last:mb-0">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-text-faint">
         {label}
       </div>
       {children}
@@ -124,15 +131,17 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function StatusGlyph({ status }: { status: ToolItem['status'] }) {
   if (status === 'running') {
-    return <Loader2 size={13} className="shrink-0 animate-spin text-accent" aria-label="Running" />
+    return <Loader2 size={14} className="shrink-0 animate-spin text-accent" aria-label="Running" />
   }
   if (status === 'error') {
-    return <CircleAlert size={13} className="shrink-0 text-danger" aria-label="Failed" />
+    return <CircleAlert size={14} className="shrink-0 text-danger" aria-label="Failed" />
   }
-  return <CircleCheck size={13} className="shrink-0 text-success" aria-label="Succeeded" />
+  // Success is the common case, so it stays faint — a green tick on every row
+  // would be a page full of "look here" with nothing to look at.
+  return <CircleCheck size={14} className="shrink-0 text-text-faint" aria-label="Succeeded" />
 }
 
-/** Pull the most identifying argument out of a tool input for the collapsed line. */
+/** Pull the most identifying argument out of a tool input for the collapsed row. */
 function summarizeInput(input: unknown): string {
   if (!input || typeof input !== 'object') return ''
   const record = input as Record<string, unknown>
@@ -141,7 +150,7 @@ function summarizeInput(input: unknown): string {
     const value = record[key]
     if (typeof value === 'string' && value.trim()) {
       const collapsed = value.replace(/\s+/g, ' ').trim()
-      return collapsed.length > 110 ? `${collapsed.slice(0, 110)}…` : collapsed
+      return collapsed.length > 100 ? `${collapsed.slice(0, 100)}…` : collapsed
     }
   }
   return ''

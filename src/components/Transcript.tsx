@@ -8,11 +8,23 @@ import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
 
 /**
- * The scrolling conversation view for one lane.
+ * The scrolling conversation for one lane.
  *
- * Every item is keyed by a stable id and rendered through a memoized component, so
- * a frame tick on the streaming block cannot re-render the history above it. That
- * is what keeps a 500-message transcript as smooth as an empty one.
+ * ## Hierarchy
+ *
+ * Three tiers, most to least important:
+ *
+ *   1. Assistant prose — full-contrast text at the reading measure. The content.
+ *   2. User turns — a quiet raised bubble. You wrote it, so you don't need to
+ *      re-read it; it's a landmark for scanning, not something to emphasize.
+ *   3. Tool calls and thinking — faint, borderless, collapsed.
+ *
+ * The old version inverted this: user bubbles and tool cards both had borders and
+ * fills while the assistant text had none, so the least important things carried
+ * the most visual weight.
+ *
+ * Spacing does the grouping (Gestalt proximity) rather than boxes: turns are
+ * separated by 24px, items within a turn by 4–8px.
  */
 export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: string) => void }) {
   const { ref, isPinned, scrollToBottom } = useStickyScroll()
@@ -20,24 +32,24 @@ export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: 
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={ref} className="h-full overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] flex-col gap-1 px-6 py-6">
+        <div className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] flex-col px-8 py-8">
           {lane.items.length === 0 ? <EmptyLane /> : null}
           {lane.items.map((item) => (
             <TranscriptRow key={item.id} item={item} onOpenLane={onOpenLane} />
           ))}
-          {/* Breathing room so the last line never sits against the composer. */}
-          <div className="h-6" aria-hidden />
+          {/* Room so the last line never sits against the composer. */}
+          <div className="h-8" aria-hidden />
         </div>
       </div>
 
       {!isPinned ? (
         <Button
           variant="subtle"
-          size="sm"
+          size="md"
           onClick={() => scrollToBottom('smooth')}
           className="absolute bottom-4 left-1/2 -translate-x-1/2 shadow-lg"
         >
-          <ArrowDown size={13} />
+          <ArrowDown size={14} />
           Jump to latest
         </Button>
       ) : null}
@@ -57,7 +69,7 @@ const TranscriptRow = memo(function TranscriptRow({
       return <UserTurn text={item.text} />
     case 'text':
       return (
-        <div className="py-1.5">
+        <div className="py-2">
           <StreamingMarkdown blockId={item.blockId} />
         </div>
       )
@@ -68,12 +80,16 @@ const TranscriptRow = memo(function TranscriptRow({
   }
 })
 
+/**
+ * A user turn. Distinguished by fill and alignment, not by a border — the fill
+ * alone is enough to mark it as "yours" without competing with the answer.
+ */
 function UserTurn({ text }: { text: string }) {
   return (
-    <div className="my-3 flex justify-end">
+    <div className="mt-6 mb-2 flex justify-end first:mt-0">
       <div
-        className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-br-sm border border-border
-                   bg-surface-raised px-3.5 py-2 text-sm text-text"
+        className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-raised px-4 py-3
+                   text-[0.95rem] text-text-muted"
         data-selectable
       >
         {text}
@@ -83,32 +99,30 @@ function UserTurn({ text }: { text: string }) {
 }
 
 /**
- * Extended thinking, collapsed by default.
- *
- * Reasoning is useful on demand and noise the rest of the time — inlining it at full
- * length would bury the actual answer. Collapsed keeps it one click away.
+ * Extended thinking, collapsed. The faintest tier in the transcript — available
+ * on demand, invisible otherwise.
  */
 function ThinkingBlock({ blockId }: { blockId: string }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="my-1.5">
+    <div className="my-1">
       <button
         onClick={() => setExpanded((value) => !value)}
-        className="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-text-faint
+        className="-mx-1 flex items-center gap-2 rounded-sm px-1 py-1 text-xs text-text-faint
                    transition-colors hover:text-text-muted"
         aria-expanded={expanded}
       >
         <ChevronRight
-          size={12}
+          size={13}
           className={cn('transition-transform duration-150', expanded && 'rotate-90')}
         />
-        <Brain size={12} />
+        <Brain size={13} />
         Thinking
       </button>
       {expanded ? (
-        <div className="mt-1 border-l-2 border-border pl-3 opacity-75">
-          <StreamingMarkdown blockId={blockId} className="text-[0.94em]" />
+        <div className="mt-1 border-l-2 border-line pl-4 text-text-muted">
+          <StreamingMarkdown blockId={blockId} className="text-[0.92em]" />
         </div>
       ) : null}
     </div>
@@ -117,8 +131,8 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
 
 function EmptyLane() {
   return (
-    <div className="py-20 text-center text-sm text-text-faint">
+    <p className="py-24 text-center text-sm text-text-faint">
       Nothing here yet — send a message to get started.
-    </div>
+    </p>
   )
 }

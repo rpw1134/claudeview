@@ -63,7 +63,12 @@ function createWindow(): void {
 
   if (DEV_SERVER_URL) {
     void window.loadURL(DEV_SERVER_URL)
-    window.webContents.openDevTools({ mode: 'detach' })
+    // Opt-in rather than automatic: a detached DevTools window on every launch
+    // covers the app and has to be dismissed each time. Run with
+    // `CLAUDEVIEW_DEVTOOLS=1 npm run dev` when you actually want it.
+    if (process.env.CLAUDEVIEW_DEVTOOLS === '1') {
+      window.webContents.openDevTools({ mode: 'detach' })
+    }
   } else {
     void window.loadFile(path.join(DIST_RENDERER, 'index.html'))
   }

@@ -7,12 +7,20 @@ import { Field, Select } from './ui/Field'
 import { shortenPath, timeAgo } from '@/lib/utils'
 
 /**
- * Landing screen when no session is open: start a new one, or resume an existing one.
+ * Landing screen: start a new session, or resume an existing one.
  *
- * The resume list comes from the SDK's `listSessions()`, which reads the same
- * on-disk store the `claude` CLI writes. Sessions started in the terminal therefore
- * appear here too — the point of this app is to stop living in the terminal without
- * abandoning the history you built there.
+ * ## One focal point
+ *
+ * "New session" is the only accent-filled element on the screen, and it sits in
+ * the only raised panel. Everything else — the directory row, the resume list —
+ * is neutral, so the eye lands on the primary action without being told twice.
+ *
+ * ## No boxes inside boxes
+ *
+ * The old version nested a bordered directory field inside a bordered card, and
+ * gave every resume row its own border. Here the panel is the only bordered
+ * surface: the directory row is a plain fill, and resume rows are separated by
+ * proximity plus a hover fill. Same grouping, a fraction of the lines.
  */
 export function NewSessionPanel({
   home,
@@ -27,10 +35,9 @@ export function NewSessionPanel({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Guard against setting state after unmount — this promise can outlive the view.
     let cancelled = false
-
     setLoading(true)
+
     api['sessions:list']({ cwd: scope === 'cwd' ? cwd : undefined, limit: 40 })
       .then((found) => {
         if (!cancelled) setSessions(found.filter((entry) => entry.sessionId))
@@ -53,39 +60,48 @@ export function NewSessionPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-8">
-      <div className="w-full max-w-lg py-8">
-        <h1 className="text-lg font-semibold text-text">Start a session</h1>
-        <p className="mt-1 text-xs text-text-muted">
+    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 py-16">
+      <div className="w-full max-w-xl">
+        <h1 className="text-xl font-semibold tracking-tight text-text">Start a session</h1>
+        <p className="mt-2 text-sm text-text-muted">
           Claude Code runs as a managed subprocess. Its output streams here.
         </p>
 
-        <div className="mt-6 flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+        <div className="mt-8 rounded-xl border border-line bg-surface p-4">
           <Field
             label="Working directory"
             hint="Claude reads and writes files relative to this directory."
           >
             <div className="flex items-center gap-2">
-              <div className="flex h-8 flex-1 items-center truncate rounded-md border border-border bg-surface-raised px-2 font-mono text-xs text-text-muted">
+              <div
+                className="flex h-9 flex-1 items-center truncate rounded-md bg-raised px-3
+                           font-mono text-xs text-text-muted"
+                title={cwd}
+              >
                 {cwd ? shortenPath(cwd, home) : 'Default (app working directory)'}
               </div>
-              <Button variant="outline" size="md" onClick={pickDirectory}>
-                <FolderOpen size={13} />
+              <Button variant="outline" size="lg" onClick={pickDirectory}>
+                <FolderOpen size={14} />
                 Choose
               </Button>
             </div>
           </Field>
 
-          <Button variant="primary" size="lg" onClick={() => onStart({ cwd })} className="w-full">
-            <Plus size={14} />
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => onStart({ cwd })}
+            className="mt-4 w-full"
+          >
+            <Plus size={16} />
             New session
           </Button>
         </div>
 
-        <div className="mt-6">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-1.5 text-xs font-semibold text-text">
-              <History size={13} />
+        <section className="mt-10">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h2 className="flex items-center gap-2 text-sm font-medium text-text">
+              <History size={14} className="text-text-faint" />
               Resume
             </h2>
             <Select
@@ -95,21 +111,20 @@ export function NewSessionPanel({
                 { value: 'all', label: 'All projects' },
                 { value: 'cwd', label: 'This directory' },
               ]}
-              className="h-6 w-36 text-[11px]"
+              className="h-8 w-40"
+              aria-label="Filter sessions"
             />
           </div>
 
           {loading ? (
-            <div className="flex items-center gap-2 p-4 text-xs text-text-faint">
-              <Loader2 size={13} className="animate-spin" />
+            <p className="flex items-center gap-2 px-3 py-6 text-sm text-text-faint">
+              <Loader2 size={14} className="animate-spin" />
               Looking for sessions…
-            </div>
-          ) : sessions.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border p-4 text-xs text-text-faint">
-              No previous sessions found.
             </p>
+          ) : sessions.length === 0 ? (
+            <p className="px-3 py-6 text-sm text-text-faint">No previous sessions found.</p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            <ul className="-mx-3">
               {sessions.map((session) => (
                 <li key={session.sessionId}>
                   <button
@@ -120,17 +135,15 @@ export function NewSessionPanel({
                         title: session.title ?? 'Resumed session',
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-left
-                               transition-colors hover:border-accent hover:bg-surface-raised"
+                    className="w-full rounded-lg px-3 py-3 text-left transition-colors
+                               hover:bg-surface"
                   >
-                    <div className="truncate text-xs font-medium text-text">
+                    <div className="truncate text-sm text-text">
                       {session.title ?? session.sessionId.slice(0, 8)}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-faint">
+                    <div className="mt-1 flex items-center gap-2 text-xs text-text-faint">
                       {session.cwd ? (
-                        <span className="truncate font-mono">
-                          {shortenPath(session.cwd, home)}
-                        </span>
+                        <span className="truncate font-mono">{shortenPath(session.cwd, home)}</span>
                       ) : null}
                       {session.updatedAt ? <span>· {timeAgo(session.updatedAt)}</span> : null}
                     </div>
@@ -139,7 +152,7 @@ export function NewSessionPanel({
               ))}
             </ul>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )

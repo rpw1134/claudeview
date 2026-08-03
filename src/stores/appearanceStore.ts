@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { applyAppearance, DEFAULT_APPEARANCE, type Appearance } from '@/lib/theme'
+import {
+  applyAppearance,
+  DEFAULT_APPEARANCE,
+  resolveColorway,
+  resolveFont,
+  type Appearance,
+} from '@/lib/theme'
 
 type AppearanceState = Appearance & {
   set: <K extends keyof Appearance>(key: K, value: Appearance[K]) => void
@@ -39,8 +45,20 @@ export const useAppearanceStore = create<AppearanceState>()(
         lineHeight: state.lineHeight,
         measure: state.measure,
       }),
+      /**
+       * Colorway and font ids were renamed when the palette was regenerated
+       * (`graphite` -> `slate`, `terminal` -> `moss`, `inter-ish` -> `grotesque`).
+       * A stored id from an older build would otherwise fall through to an
+       * unstyled theme, so normalize on rehydrate and write the result back.
+       */
       onRehydrateStorage: () => (state) => {
-        applyAppearance(state ?? DEFAULT_APPEARANCE)
+        if (!state) {
+          applyAppearance(DEFAULT_APPEARANCE)
+          return
+        }
+        state.colorway = resolveColorway(state.colorway).id
+        state.font = resolveFont(state.font)
+        applyAppearance(state)
       },
     },
   ),

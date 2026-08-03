@@ -26,7 +26,9 @@ for the job.
   transcript, since the CLI itself replays nothing (main thread only; see
   [troubleshooting](docs/troubleshooting.md#a-session-sits-on-starting-and-shows-no-messages)).
 - **Adjustable appearance.** Five colorways, four typefaces, and live control over
-  text size, line height, and line width. `⌘,`
+  text size, line height, and line width. `⌘,` Colorways are generated from one
+  shared lightness ramp, so contrast is identical across all five — see
+  [design-system.md](docs/design-system.md).
 - **Auto permission mode by default**, changeable per session from the status bar.
 
 ## Requirements
@@ -95,7 +97,7 @@ a thousand-message transcript rendering as smoothly as an empty one.
 | [streaming.md](docs/streaming.md) | How smooth output is achieved, end to end |
 | [ipc-contract.md](docs/ipc-contract.md) | Channels, event union, adding an event |
 | [lifecycle-and-cleanup.md](docs/lifecycle-and-cleanup.md) | Every teardown path and why it exists |
-| [theming.md](docs/theming.md) | Colorways, typography, adding a colorway |
+| [design-system.md](docs/design-system.md) | Surfaces, spacing, radius, hierarchy, colorways |
 | [troubleshooting.md](docs/troubleshooting.md) | Known issues, including the Electron ESM hang |
 
 ## Security posture

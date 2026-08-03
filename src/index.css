@@ -1,24 +1,23 @@
 @import 'tailwindcss';
 
 /**
- * Bridge runtime CSS variables into Tailwind's token system.
- *
- * Each token points at a `--*` custom property that `applyAppearance()` rewrites on
- * <html> at runtime. That indirection is what makes colorway switching instant:
- * `bg-surface` compiles to `background-color: var(--surface)`, so changing the
- * variable restyles every element at once, with no rebuild, no re-render, and no
- * class swapping anywhere in the component tree.
+ * Tailwind tokens point at runtime CSS variables, so `bg-surface` compiles to
+ * `background-color: var(--surface)` and a colorway switch restyles everything at
+ * once with no rebuild and no re-render.
  */
 @theme {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-border: var(--border);
+  --color-raised: var(--raised);
+  --color-overlay: var(--overlay);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
   --color-text-faint: var(--text-faint);
   --color-accent: var(--accent);
   --color-accent-contrast: var(--accent-contrast);
+  --color-accent-wash: var(--accent-wash);
   --color-success: var(--success);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
@@ -26,29 +25,54 @@
 
   --font-sans: var(--font-body);
   --font-mono: var(--font-mono);
+
+  /*
+   * Corner radius, scaled to element size rather than one global value.
+   * A single radius everywhere flattens hierarchy; tying it to size lets the
+   * radius signal what kind of thing you're looking at.
+   *
+   *   sm  <=24px   dots, chips, tiny icon buttons
+   *   md  25-43px  buttons, selects, tabs, list rows
+   *   lg  >=44px   cards, tool calls, resume rows
+   *   xl           large panels, dialogs, the composer shell
+   *
+   * Nesting rule: inner radius = outer radius - padding. The composer shell is
+   * xl(16) with p-2(8), so its send button is md(8) and the curves stay
+   * concentric. Reusing the outer radius inside leaves an optically uneven gap.
+   */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 }
 
-/* Fallbacks so the first paint is never unstyled if JS is slow to apply the theme. */
+/*
+ * Fallbacks so the first paint is themed rather than unstyled. Mirrors the
+ * generated `slate` colorway in src/lib/theme.ts.
+ */
 :root {
-  --bg: oklch(0.17 0.005 275);
-  --surface: oklch(0.21 0.006 275);
-  --surface-raised: oklch(0.25 0.008 275);
-  --border: oklch(0.31 0.008 275);
-  --text: oklch(0.93 0.004 275);
-  --text-muted: oklch(0.68 0.008 275);
-  --text-faint: oklch(0.53 0.008 275);
-  --accent: oklch(0.72 0.14 250);
-  --accent-contrast: oklch(0.17 0.01 250);
-  --success: oklch(0.74 0.15 155);
-  --danger: oklch(0.66 0.19 22);
-  --warning: oklch(0.79 0.14 80);
-  --code-bg: oklch(0.15 0.006 275);
+  --bg: oklch(0.205 0.007 265);
+  --surface: oklch(0.245 0.007 265);
+  --raised: oklch(0.290 0.008 265);
+  --overlay: oklch(0.320 0.008 265);
+  --line: oklch(0.335 0.008 265);
+  --line-strong: oklch(0.565 0.008 265);
+  --text: oklch(0.910 0.004 265);
+  --text-muted: oklch(0.720 0.008 265);
+  --text-faint: oklch(0.585 0.010 265);
+  --accent: oklch(0.700 0.115 250);
+  --accent-contrast: oklch(0.190 0.007 250);
+  --accent-wash: color-mix(in oklch, oklch(0.7 0.115 250) 16%, transparent);
+  --success: oklch(0.720 0.130 155);
+  --danger: oklch(0.720 0.160 25);
+  --warning: oklch(0.720 0.120 85);
+  --code-bg: oklch(0.185 0.007 265);
 
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   --font-size-base: 15px;
-  --line-height-body: 1.65;
-  --measure: 78ch;
+  --line-height-body: 1.6;
+  --measure: 72ch;
 
   color-scheme: dark;
 }
@@ -66,13 +90,12 @@ body {
   font-family: var(--font-body);
   font-size: var(--font-size-base);
   line-height: var(--line-height-body);
-  /* Grayscale AA keeps light text on dark backgrounds from looking bolded on macOS. */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
 }
 
-/* The whole window is app chrome; only inputs and transcript text are selectable. */
+/* App chrome isn't selectable; content and inputs are. */
 body {
   user-select: none;
   cursor: default;
@@ -84,7 +107,6 @@ textarea,
   cursor: auto;
 }
 
-/* Drag region for the frameless macOS title bar. */
 [data-drag-region] {
   -webkit-app-region: drag;
 }
@@ -102,28 +124,37 @@ textarea,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--text-faint) 35%, transparent);
+  background: color-mix(in oklch, var(--text-faint) 28%, transparent);
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 3px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--text-faint) 60%, transparent);
+  background: color-mix(in oklch, var(--text-faint) 50%, transparent);
   background-clip: content-box;
 }
 
+/*
+ * One focus treatment for the whole app.
+ *
+ * `:focus-visible` only, so clicking a control doesn't paint a ring — a ring on
+ * every click is a large part of what made the UI feel busy. Keyboard users still
+ * get a clear, high-contrast indicator.
+ */
+*:focus {
+  outline: none;
+}
 *:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /**
  * Markdown output.
  *
- * Scoped under `.prose-stream` so model-authored HTML can never restyle the app
- * chrome. Spacing is tuned for text that grows: margins collapse consistently, so a
- * new paragraph appearing doesn't shift everything above it.
+ * Scoped under `.prose-stream` so model-authored HTML can never restyle app
+ * chrome. Vertical rhythm is on a 4px grid to match the spacing scale.
  */
 .prose-stream {
   max-width: var(--measure);
@@ -142,24 +173,25 @@ textarea,
 .prose-stream blockquote,
 .prose-stream pre,
 .prose-stream table {
-  margin: 0.75em 0;
+  margin: 12px 0;
 }
 .prose-stream h1,
 .prose-stream h2,
 .prose-stream h3,
 .prose-stream h4 {
-  margin: 1.4em 0 0.5em;
+  margin: 24px 0 8px;
   line-height: 1.3;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .prose-stream h1 {
-  font-size: 1.4em;
+  font-size: 1.35em;
 }
 .prose-stream h2 {
-  font-size: 1.22em;
+  font-size: 1.2em;
 }
 .prose-stream h3 {
-  font-size: 1.08em;
+  font-size: 1.05em;
 }
 .prose-stream h4 {
   font-size: 1em;
@@ -167,10 +199,10 @@ textarea,
 }
 .prose-stream ul,
 .prose-stream ol {
-  padding-left: 1.4em;
+  padding-left: 24px;
 }
 .prose-stream li {
-  margin: 0.25em 0;
+  margin: 4px 0;
 }
 .prose-stream li::marker {
   color: var(--text-faint);
@@ -181,39 +213,40 @@ textarea,
   text-underline-offset: 2px;
 }
 .prose-stream strong {
-  font-weight: 650;
+  font-weight: 640;
   color: var(--text);
 }
 .prose-stream blockquote {
-  border-left: 2px solid var(--border);
-  padding-left: 1em;
+  border-left: 2px solid var(--line);
+  padding-left: 16px;
   color: var(--text-muted);
 }
 .prose-stream hr {
   border: none;
-  border-top: 1px solid var(--border);
-  margin: 1.5em 0;
+  border-top: 1px solid var(--line);
+  margin: 24px 0;
 }
+/*
+ * Inline code gets a fill and no border. A border here would put a box inside a
+ * paragraph inside a bubble — the nesting that made the old UI noisy.
+ */
 .prose-stream code {
   font-family: var(--font-mono);
-  font-size: 0.88em;
+  font-size: 0.875em;
   background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.1em 0.34em;
+  border-radius: var(--radius-sm);
+  padding: 2px 5px;
 }
 .prose-stream pre {
   background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.85em 1em;
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
   overflow-x: auto;
 }
 .prose-stream pre code {
   background: none;
-  border: none;
   padding: 0;
-  font-size: 0.86em;
+  font-size: 0.85em;
   line-height: 1.55;
 }
 .prose-stream table {
@@ -225,21 +258,22 @@ textarea,
 }
 .prose-stream th,
 .prose-stream td {
-  border: 1px solid var(--border);
-  padding: 0.4em 0.65em;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
   text-align: left;
 }
 .prose-stream th {
-  background: var(--surface-raised);
   font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.9em;
 }
 
-/* Blinking caret marking the live edge of the stream. */
+/* Caret marking the live edge of the stream. */
 .stream-caret {
   display: inline-block;
-  width: 0.5em;
+  width: 2px;
   height: 1.05em;
-  margin-left: 1px;
+  margin-left: 2px;
   vertical-align: text-bottom;
   background: var(--accent);
   border-radius: 1px;
@@ -252,7 +286,7 @@ textarea,
   }
   46%,
   100% {
-    opacity: 0.15;
+    opacity: 0.2;
   }
 }
 
