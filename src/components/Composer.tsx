@@ -130,6 +130,9 @@ export function Composer({
           Shell padding is a uniform 8px; both children are 36px tall at rest.
         */}
         <div
+          // Marks this as the focus indicator for the field inside it; see the
+          // `[data-focus-host]` rule in index.css.
+          data-focus-host
           className={cn(
             'flex items-end gap-2 rounded-xl border p-2 transition-colors duration-150',
             'bg-raised',
@@ -170,6 +173,7 @@ export function Composer({
               disabled={!canSend}
               aria-label="Send message"
               title="Send (Enter)"
+              className="focus-visible:outline-2 focus-visible:outline-accent"
             >
               <ArrowUp size={16} />
             </Button>

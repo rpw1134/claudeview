@@ -47,7 +47,7 @@ function emptyTab(id: string, options: Partial<CreateSessionRequest> & { title?:
     lanes: { [MAIN_LANE]: { id: MAIN_LANE, closed: false, items: [] } },
     laneOrder: [MAIN_LANE],
     activeLaneId: MAIN_LANE,
-    totalCostUsd: 0,
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
     createdAt: Date.now(),
     seenBlockIds: new Set(),
   }
@@ -107,7 +107,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
   let model = tab.model
   let permissionMode = tab.permissionMode
   let tools = tab.tools
-  let totalCostUsd = tab.totalCostUsd
+  let usage = tab.usage
   let lastError = tab.lastError
   let title = tab.title
 
@@ -245,7 +245,14 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         break
 
       case 'result':
-        totalCostUsd += event.costUsd
+        // Accumulate across turns so the status bar shows the session total, not
+        // just the last turn.
+        usage = {
+          inputTokens: usage.inputTokens + event.usage.inputTokens,
+          outputTokens: usage.outputTokens + event.usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens + event.usage.cacheReadTokens,
+          cacheCreationTokens: usage.cacheCreationTokens + event.usage.cacheCreationTokens,
+        }
         break
 
       case 'error':
@@ -267,7 +274,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     model,
     permissionMode,
     tools,
-    totalCostUsd,
+    usage,
     lastError,
     lanes,
     laneOrder,

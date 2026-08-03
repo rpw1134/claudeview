@@ -306,14 +306,25 @@ export class MessageNormalizer {
     this.streamedBlocks.clear()
 
     const ok = message.subtype === 'success' && !message.is_error
+    // `usage` mixes plain counts with nested objects (e.g. `cache_creation`), so
+    // read it as unknown and pull only the scalar fields we display.
+    const usage = (message.usage ?? {}) as unknown as Record<string, unknown>
+    const count = (key: string): number =>
+      typeof usage[key] === 'number' ? (usage[key] as number) : 0
+
     return [
       {
         kind: 'result',
         ok,
         text: message.subtype === 'success' ? message.result : `Run ended: ${message.subtype}`,
-        costUsd: message.total_cost_usd ?? 0,
         durationMs: message.duration_ms ?? 0,
         numTurns: message.num_turns ?? 0,
+        usage: {
+          inputTokens: count('input_tokens'),
+          outputTokens: count('output_tokens'),
+          cacheReadTokens: count('cache_read_input_tokens'),
+          cacheCreationTokens: count('cache_creation_input_tokens'),
+        },
       },
       { kind: 'status', status: ok ? 'idle' : 'error' },
     ]

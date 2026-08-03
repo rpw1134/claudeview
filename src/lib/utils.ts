@@ -28,9 +28,11 @@ export function shortenPath(fullPath: string | undefined, home?: string): string
   return `…/${segments.slice(-3).join('/')}`
 }
 
-export function formatCost(usd: number): string {
-  if (!usd) return '$0.00'
-  return usd < 0.01 ? `<$0.01` : `$${usd.toFixed(2)}`
+/** Compact token counts: 950, 12.4k, 1.8M. Keeps the status bar readable. */
+export function compactTokens(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
 }
 
 export function formatDuration(ms: number): string {

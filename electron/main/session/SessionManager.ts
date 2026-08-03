@@ -26,6 +26,12 @@ export class SessionManager {
   private readonly runners = new Map<string, SessionRunner>()
   /** Latest known session id per tab, for persistence and the resume picker. */
   private readonly sessionIds = new Map<string, string>()
+  /**
+   * Monotonic batch counter. Stamped on every envelope so the renderer can drop
+   * duplicates; see `StreamEnvelope.seq`. Process-wide rather than per-tab so a
+   * single counter in the renderer is enough.
+   */
+  private seq = 0
 
   constructor(private readonly getWebContents: () => WebContents | null) {}
 
@@ -84,6 +90,7 @@ export class SessionManager {
   private emit(tabId: string, events: StreamEvent[]): void {
     const contents = this.getWebContents()
     if (!contents || contents.isDestroyed()) return
-    contents.send(STREAM_CHANNEL, { tabId, events })
+    this.seq += 1
+    contents.send(STREAM_CHANNEL, { tabId, events, seq: this.seq })
   }
 }

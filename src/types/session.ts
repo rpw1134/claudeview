@@ -43,6 +43,13 @@ export type Lane = {
   items: TranscriptItem[]
 }
 
+export type TokenUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}
+
 export type Tab = {
   id: string
   title: string
@@ -57,7 +64,8 @@ export type Tab = {
   /** Lane render order; `'main'` is always first. */
   laneOrder: string[]
   activeLaneId: string
-  totalCostUsd: number
+  /** Cumulative token usage for the session, summed across turns. */
+  usage: TokenUsage
   lastError?: string
   createdAt: number
   /** Block ids already materialized as items, so a delta doesn't re-create one. */

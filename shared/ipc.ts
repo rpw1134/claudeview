@@ -145,14 +145,24 @@ export type StreamEvent =
   /** Echo of a user turn, so the transcript owns the full conversation. */
   | { kind: 'user-message'; text: string; agent: AgentRef }
 
-  /** Turn finished. Carries the cost/usage summary for the status bar. */
+  /** Turn finished. Carries the usage summary for the status bar. */
   | {
       kind: 'result'
       ok: boolean
       text: string
-      costUsd: number
       durationMs: number
       numTurns: number
+      /**
+       * Token usage for the turn. Cache reads are separated because they dominate
+       * the input count in an agentic loop and are billed differently — lumping
+       * them in makes the input figure look alarming and mean nothing.
+       */
+      usage: {
+        inputTokens: number
+        outputTokens: number
+        cacheReadTokens: number
+        cacheCreationTokens: number
+      }
     }
   | { kind: 'error'; message: string }
 
@@ -166,7 +176,23 @@ export type StreamEvent =
  * coalesces events on a frame-length timer, so the renderer receives at most one
  * message per frame regardless of how fast the model is producing tokens.
  */
-export type StreamEnvelope = { tabId: string; events: StreamEvent[] }
+export type StreamEnvelope = {
+  tabId: string
+  events: StreamEvent[]
+  /**
+   * Monotonic sequence number, unique across the whole main process.
+   *
+   * The renderer drops any envelope whose `seq` it has already applied. Without
+   * this, a duplicated subscription — two `ipcRenderer.on` listeners on the stream
+   * channel, which is easy to end up with across HMR reloads — applies every batch
+   * twice, and because text deltas are *appended* to a buffer that renders the
+   * transcript twice over.
+   *
+   * Making application idempotent fixes the symptom at the point where correctness
+   * actually matters, independently of how a duplicate got delivered.
+   */
+  seq: number
+}
 
 /**
  * Renderer -> main request/response calls. Keys are the IPC channel names;

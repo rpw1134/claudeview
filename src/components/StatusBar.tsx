@@ -1,7 +1,7 @@
 import { AlertTriangle, FolderOpen, Settings2 } from 'lucide-react'
 import type { PermissionMode, SessionStatus } from '@shared/ipc'
 import type { Tab } from '@/types/session'
-import { formatCost, shortenPath } from '@/lib/utils'
+import { compactTokens, shortenPath } from '@/lib/utils'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +49,8 @@ export function StatusBar({
   onOpenSettings: () => void
 }) {
   const isRisky = tab.permissionMode === 'bypassPermissions' || tab.permissionMode === 'dontAsk'
+  const totalTokens =
+    tab.usage.inputTokens + tab.usage.outputTokens + tab.usage.cacheReadTokens
 
   return (
     <div className="flex h-8 shrink-0 items-center gap-4 border-t border-line bg-surface px-4 text-xs text-text-faint">
@@ -63,9 +65,20 @@ export function StatusBar({
 
       {tab.model ? <span className="shrink-0 truncate font-mono">{tab.model}</span> : null}
 
-      {tab.totalCostUsd > 0 ? (
-        <span className="shrink-0 font-mono" title="Total session cost">
-          {formatCost(tab.totalCostUsd)}
+      {/*
+        Token usage, not cost. Cache reads are shown separately from fresh input:
+        in an agentic loop they dominate the input count, so folding them together
+        produces an alarming number that means nothing.
+      */}
+      {totalTokens > 0 ? (
+        <span
+          className="shrink-0 font-mono"
+          title={`Input ${tab.usage.inputTokens.toLocaleString()} · Output ${tab.usage.outputTokens.toLocaleString()} · Cache read ${tab.usage.cacheReadTokens.toLocaleString()} · Cache write ${tab.usage.cacheCreationTokens.toLocaleString()}`}
+        >
+          {compactTokens(tab.usage.inputTokens)} in · {compactTokens(tab.usage.outputTokens)} out
+          {tab.usage.cacheReadTokens > 0
+            ? ` · ${compactTokens(tab.usage.cacheReadTokens)} cached`
+            : ''}
         </span>
       ) : null}
 

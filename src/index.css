@@ -150,6 +150,19 @@ textarea,
   border-radius: var(--radius-sm);
 }
 
+/*
+ * Controls that live inside a shell which already shows focus must not draw their
+ * own ring. The composer is the case that matters: its shell turns its border to
+ * the accent colour on `focus-within`, so an outline on the textarea inside it
+ * produced a ring inside a ring — two focus indicators for one focused control.
+ *
+ * The shell is the indicator; the field opts out. The send button inside keeps its
+ * own ring, because it is separately focusable via Tab.
+ */
+[data-focus-host] :focus-visible {
+  outline: none;
+}
+
 /**
  * Markdown output.
  *

@@ -165,6 +165,15 @@ export class SessionRunner {
       // Without this, subagents emit only tool_use/tool_result — enough for a
       // progress counter but not enough to render their transcripts.
       forwardSubagentText: true,
+      /*
+       * `display: 'summarized'` is required to see any reasoning at all.
+       *
+       * Current models default to `'omitted'`, which still streams thinking blocks
+       * but with the text field empty — so a UI that renders them shows nothing and
+       * looks broken. Thinking happens and is billed identically either way; this
+       * only controls whether a readable summary comes back.
+       */
+      thinking: { type: 'adaptive', display: 'summarized' },
       permissionMode: this.request.permissionMode ?? 'auto',
       cwd: this.request.cwd,
       abortController: this.abort,
