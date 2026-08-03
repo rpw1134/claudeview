@@ -17,6 +17,58 @@ import electron from 'vite-plugin-electron/simple'
 const EXTERNAL_MAIN_DEPS = ['electron', '@anthropic-ai/claude-agent-sdk']
 
 /**
+ * Production CSP. The renderer makes no network requests of any kind — every byte
+ * it needs comes over IPC — so `connect-src 'none'` is accurate rather than
+ * aspirational, and it turns a stray fetch() into an immediate visible failure.
+ */
+const CSP_PRODUCTION =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; font-src 'self' data:; connect-src 'none'; " +
+  "object-src 'none'; base-uri 'none'; form-action 'none'"
+
+/**
+ * Dev CSP. Two unavoidable relaxations, both scoped to localhost:
+ *
+ *  - `connect-src ws://localhost:*` — Vite's HMR channel is a WebSocket. Under the
+ *    production policy the renderer loads fine but the console fills with
+ *    "Connecting to 'ws://localhost:5174' violates ... connect-src 'none'" and hot
+ *    reload silently never works.
+ *  - `script-src 'unsafe-inline'` — React Fast Refresh injects an inline preamble
+ *    script into the served HTML.
+ *
+ * The port is wildcarded because Vite increments it when one is already taken
+ * (5173 -> 5174 -> ...), and both `localhost` and `127.0.0.1` are listed because
+ * which one is used depends on how the dev server resolves the host.
+ */
+const CSP_DEVELOPMENT =
+  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; font-src 'self' data:; " +
+  "connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*; " +
+  "object-src 'none'; base-uri 'none'; form-action 'none'"
+
+/**
+ * Swaps the `<!--CSP-->` placeholder in index.html for the policy matching the
+ * current mode. Keeping the tag in the HTML (rather than sending a header) means
+ * the policy also applies to the `file://` load used by the packaged app, where
+ * there is no HTTP response to attach a header to.
+ */
+function cspPlugin(): import('vite').Plugin {
+  return {
+    name: 'claudeview-csp',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html, ctx) {
+        const policy = ctx.server ? CSP_DEVELOPMENT : CSP_PRODUCTION
+        return html.replace(
+          '<!--CSP-->',
+          `<meta http-equiv="Content-Security-Policy" content="${policy}" />`,
+        )
+      },
+    },
+  }
+}
+
+/**
  * Three build targets live in this config:
  *
  *  - renderer  (src/)               -> dist/          , browser context, no Node access
@@ -35,6 +87,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    cspPlugin(),
     react(),
     tailwindcss(),
     electron({

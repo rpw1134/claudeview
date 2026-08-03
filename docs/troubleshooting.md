@@ -62,6 +62,38 @@ so the option moved — `EXTERNAL_MAIN_DEPS` is declared under **both**
 
 ---
 
+## `Connecting to 'ws://localhost:...' violates ... connect-src 'none'`
+
+**Symptom.** In `npm run dev`, the console reports a CSP violation for the Vite HMR
+WebSocket. The app loads and works, but hot reload silently never fires.
+
+**Cause.** The production CSP sets `connect-src 'none'` — correct for the packaged
+app, since the renderer makes no network requests at all. But Vite's dev server
+pushes hot updates over a WebSocket, and React Fast Refresh injects an inline
+preamble script, both of which that policy blocks.
+
+**Fix.** The CSP is mode-aware, injected into `index.html` at the `<!--CSP-->`
+placeholder by the `cspPlugin` in `vite.config.ts`. Dev additionally allows
+`ws://localhost:*` and `'unsafe-inline'` scripts; production stays fully locked
+down. Verify both:
+
+```bash
+npm run build && grep -o 'content="default-src[^"]*"' dist/index.html   # connect-src 'none'
+curl -s http://localhost:5174/ | grep -o 'content="default-src[^"]*"'   # ws://localhost:*
+```
+
+If you still see the error, a **stale dev server** from an earlier run is serving
+the old HTML — note the port in the message and check it:
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN | grep 517
+```
+
+Vite increments the port when one is taken (5173 → 5174 → …), so an orphaned server
+keeps serving the previous build on the port your app connects to.
+
+---
+
 ## Sessions don't appear in the resume list
 
 The list comes from the SDK's `listSessions()`, reading the same `~/.claude/projects`

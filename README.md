@@ -104,7 +104,9 @@ untrusted:
 - `contextIsolation: true`, `nodeIntegration: false` — no Node in the renderer.
 - The preload bridge exposes nine named functions, not a generic `invoke(channel)`.
 - All markdown is sanitized with DOMPurify before rendering.
-- A strict CSP with `connect-src 'none'` — the renderer makes no network requests.
+- A strict CSP with `connect-src 'none'` in production — the renderer makes no
+  network requests. (Dev additionally allows `ws://localhost:*` for Vite HMR; see
+  `cspPlugin` in `vite.config.ts`.)
 - Links open in the system browser; in-app navigation is denied.
 
 Note that the agent itself still runs with whatever permissions its mode allows.

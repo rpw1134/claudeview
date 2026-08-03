@@ -4,14 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      Content-Security-Policy is deliberately strict. The renderer never talks to the
-      network: everything it needs arrives over IPC from the main process. `connect-src
-      'none'` makes an accidental fetch() a load-time failure rather than a silent leak.
+      The Content-Security-Policy meta tag is injected here by the `csp` plugin in
+      vite.config.ts, because it has to differ between dev and production.
+
+      Production is locked down — in particular `connect-src 'none'`, since the
+      renderer never talks to the network at all: everything it needs arrives over
+      IPC. That turns an accidental fetch() into a load-time failure instead of a
+      silent data leak.
+
+      Dev has to be looser: Vite's HMR runs over a WebSocket and React Fast Refresh
+      injects an inline preamble script, both of which the production policy blocks.
+      The relaxations are scoped to localhost and only ever apply to the dev server.
     -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
-    />
+    <!--CSP-->
     <title>ClaudeView</title>
   </head>
   <body>
