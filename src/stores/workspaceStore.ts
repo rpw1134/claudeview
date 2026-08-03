@@ -47,8 +47,21 @@ type WorkspaceState = {
   focusedPanelId: string | null
   /** Panel currently being dragged, so the grid can dim it. */
   draggingPanelId: string | null
+  /**
+   * Increments on every keyboard focus change. Panels watch it to decide when to
+   * pull the caret into their input; a counter rather than a boolean so switching
+   * back to the same panel re-focuses rather than being a no-op.
+   */
+  autoFocusToken: number
 
-  focusPanel: (panelId: string) => void
+  /**
+   * Focus a panel. `viaKeyboard` additionally bumps `autoFocusToken`, which is what
+   * moves the caret into that panel's input — pointer focus deliberately does not,
+   * or clicking into a transcript to select text would yank the caret away.
+   */
+  focusPanel: (panelId: string, viaKeyboard?: boolean) => void
+  /** Move focus to the next/previous panel in visual order. */
+  cyclePanel: (delta: 1 | -1) => void
   addPanel: (
     kind: PanelKind,
     options?: { cwd?: string; resume?: string; title?: string; direction?: SplitDirection },
@@ -70,8 +83,24 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
   layout: null,
   focusedPanelId: null,
   draggingPanelId: null,
+  autoFocusToken: 0,
 
-  focusPanel: (panelId) => setState({ focusedPanelId: panelId }),
+  focusPanel: (panelId, viaKeyboard = false) =>
+    setState((state) => ({
+      focusedPanelId: panelId,
+      autoFocusToken: viaKeyboard ? state.autoFocusToken + 1 : state.autoFocusToken,
+    })),
+
+  cyclePanel: (delta) => {
+    const state = getState()
+    // Visual order, so cycling follows the layout rather than creation order.
+    const order = collectPanelIds(state.layout)
+    if (order.length === 0) return
+
+    const index = order.indexOf(state.focusedPanelId ?? '')
+    const next = order[(index + delta + order.length) % order.length]!
+    setState({ focusedPanelId: next, autoFocusToken: state.autoFocusToken + 1 })
+  },
 
   addPanel: async (kind, options = {}) => {
     const state = getState()

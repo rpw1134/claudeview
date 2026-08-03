@@ -5,7 +5,7 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
 import { Button } from './ui/Button'
-import { cn, shortenPath } from '@/lib/utils'
+import { cn, compactTokens, shortenPath } from '@/lib/utils'
 
 /**
  * One panel: header plus content.
@@ -18,6 +18,7 @@ import { cn, shortenPath } from '@/lib/utils'
 export const PanelFrame = memo(function PanelFrame({
   panel,
   focused,
+  autoFocusToken,
   home,
   onFocus,
   onClose,
@@ -25,6 +26,7 @@ export const PanelFrame = memo(function PanelFrame({
 }: {
   panel: Panel
   focused: boolean
+  autoFocusToken: number
   home?: string
   onFocus: () => void
   onClose: () => void
@@ -40,12 +42,21 @@ export const PanelFrame = memo(function PanelFrame({
   const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
   const isBusy = tab?.status === 'thinking' || tab?.status === 'streaming' || tab?.status === 'tool'
 
+  // Model and token totals used to live in a window-level status strip. They're
+  // per-session facts, so they belong on the session's own header — and keeping
+  // them here is what let that strip (and its focus jitter) go away entirely.
+  const tokens = tab ? tab.usage.inputTokens + tab.usage.outputTokens : 0
+  const meta = tab
+    ? [tab.model, tokens > 0 ? `${compactTokens(tokens)} tok` : null].filter(Boolean).join(' · ')
+    : undefined
+
   return (
     <section
       onMouseDownCapture={onFocus}
       aria-label={title}
+      // `@container` so the header can drop the cwd in a narrow panel.
       className={cn(
-        'flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface',
+        '@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface',
         // The focused panel carries the only ring on screen, and it encodes
         // something real: where the message bar will send.
         focused ? 'ring-1 ring-accent' : 'ring-1 ring-transparent',
@@ -69,13 +80,18 @@ export const PanelFrame = memo(function PanelFrame({
           <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" aria-hidden />
         ) : null}
 
-        {panel.cwd ? (
-          <span className="ml-auto truncate font-mono text-xs text-text-faint" title={panel.cwd}>
-            {shortenPath(panel.cwd, home)}
-          </span>
-        ) : (
-          <span className="ml-auto" />
-        )}
+        <span
+          className="ml-auto truncate font-mono text-xs text-text-faint"
+          title={[panel.cwd, meta].filter(Boolean).join('  ·  ')}
+        >
+          {/* Metadata first: it changes as you work, whereas cwd is fixed and
+              already implied by the session's title. Narrow panels drop the cwd. */}
+          {meta ? <span>{meta}</span> : null}
+          {meta && panel.cwd ? <span className="mx-1 opacity-50">·</span> : null}
+          {panel.cwd ? (
+            <span className="hidden @[22rem]:inline">{shortenPath(panel.cwd, home)}</span>
+          ) : null}
+        </span>
 
         <Button
           variant="ghost"
@@ -99,7 +115,11 @@ export const PanelFrame = memo(function PanelFrame({
             onFocus={onFocus}
           />
         ) : (
-          <SessionPanel tabId={panel.refId} />
+          <SessionPanel
+            tabId={panel.refId}
+            panelFocused={focused}
+            autoFocusToken={focused ? autoFocusToken : 0}
+          />
         )}
       </div>
     </section>

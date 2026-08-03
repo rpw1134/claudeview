@@ -41,6 +41,7 @@ export function PanelMosaic({
   panels,
   layout,
   focusedPanelId,
+  autoFocusToken,
   home,
   onFocus,
   onClose,
@@ -48,6 +49,7 @@ export function PanelMosaic({
   panels: Panel[]
   layout: LayoutNode | null
   focusedPanelId: string | null
+  autoFocusToken: number
   home?: string
   onFocus: (panelId: string) => void
   onClose: (panelId: string) => void
@@ -142,6 +144,7 @@ export function PanelMosaic({
         node={layout}
         panelById={panelById}
         focusedPanelId={focusedPanelId}
+        autoFocusToken={autoFocusToken}
         home={home}
         drag={drag}
         onFocus={onFocus}
@@ -157,6 +160,7 @@ function LayoutBranch({
   node,
   panelById,
   focusedPanelId,
+  autoFocusToken,
   home,
   drag,
   onFocus,
@@ -167,6 +171,7 @@ function LayoutBranch({
   node: LayoutNode
   panelById: Map<string, Panel>
   focusedPanelId: string | null
+  autoFocusToken: number
   home?: string
   drag: DragState | null
   onFocus: (panelId: string) => void
@@ -191,6 +196,7 @@ function LayoutBranch({
         <PanelFrame
           panel={panel}
           focused={panel.id === focusedPanelId}
+          autoFocusToken={autoFocusToken}
           home={home}
           onFocus={() => onFocus(panel.id)}
           onClose={() => onClose(panel.id)}
@@ -217,6 +223,7 @@ function LayoutBranch({
       node={node.children[0]}
       panelById={panelById}
       focusedPanelId={focusedPanelId}
+      autoFocusToken={autoFocusToken}
       home={home}
       drag={drag}
       onFocus={onFocus}
@@ -228,6 +235,7 @@ function LayoutBranch({
       node={node.children[1]}
       panelById={panelById}
       focusedPanelId={focusedPanelId}
+      autoFocusToken={autoFocusToken}
       home={home}
       drag={drag}
       onFocus={onFocus}

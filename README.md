@@ -19,8 +19,8 @@ for the job.
   [docs/streaming.md](docs/streaming.md).
 - **Dynamic panels.** Up to 8 panels in one window, each a Claude session or a real
   terminal. Drag a panel's header to rearrange, drag a divider to resize; the layout
-  is a split tree that always fills the viewport exactly. One message bar at the
-  bottom targets whichever panel is focused. See
+  is a split tree that always fills the viewport exactly. Each session panel carries
+  its own compact composer; terminals take keystrokes directly. See
   [panels-and-terminals.md](docs/panels-and-terminals.md).
 - **Real terminals.** `node-pty` + `xterm.js`, so `vim`, colour, and job control all
   work — not a stdout pipe.

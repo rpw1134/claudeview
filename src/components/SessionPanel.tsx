@@ -1,21 +1,33 @@
+import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'
 import { LaneTabs } from './LaneTabs'
 import { Transcript } from './Transcript'
+import { PanelComposer } from './PanelComposer'
 import { Button } from './ui/Button'
-import { AlertCircle, RefreshCw } from 'lucide-react'
 
 /**
- * A session's transcript inside a panel.
+ * A session inside a panel: transcript plus its own composer.
  *
- * Deliberately has no composer of its own — input is the single message bar at the
- * bottom of the window, which routes to whichever panel is focused. Giving each
- * panel its own input would put up to eight text fields on screen with no way to
- * tell which one is live.
+ * Input lives here rather than at the window level so that focusing a terminal
+ * doesn't add or remove a row from the window and shift every panel. Each session
+ * owns its input, terminals take keystrokes directly, and nothing at the window
+ * level changes when focus moves.
  */
-export function SessionPanel({ tabId }: { tabId: string }) {
+export function SessionPanel({
+  tabId,
+  panelFocused,
+  autoFocusToken,
+}: {
+  tabId: string
+  panelFocused: boolean
+  autoFocusToken: number
+}) {
   const tab = useSessionStore((state) => state.tabs.find((entry) => entry.id === tabId))
   const setActiveLane = useSessionStore((state) => state.setActiveLane)
   const reconnect = useSessionStore((state) => state.reconnect)
+  const send = useSessionStore((state) => state.send)
+  const interrupt = useSessionStore((state) => state.interrupt)
+  const setPermissionMode = useSessionStore((state) => state.setPermissionMode)
 
   if (!tab) {
     return <p className="p-4 text-sm text-text-faint">Session not found.</p>
@@ -35,25 +47,35 @@ export function SessionPanel({ tabId }: { tabId: string }) {
           lane={lane}
           onOpenLane={(laneId) => setActiveLane(tab.id, laneId)}
         />
-      ) : null}
+      ) : (
+        <div className="min-h-0 flex-1" />
+      )}
 
       {isEnded ? (
-        <div className="shrink-0 border-t border-line px-4 py-3">
-          <div className="flex items-center gap-3">
-            <AlertCircle
-              size={14}
-              className={tab.status === 'error' ? 'text-danger' : 'text-text-faint'}
-            />
-            <p className="min-w-0 flex-1 truncate text-xs text-text-muted">
-              {tab.lastError ?? 'This session has ended.'}
-            </p>
-            <Button variant="subtle" size="sm" onClick={() => void reconnect(tab.id)}>
-              <RefreshCw size={12} />
-              Reconnect
-            </Button>
-          </div>
+        <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-1">
+          <AlertCircle
+            size={13}
+            className={tab.status === 'error' ? 'text-danger' : 'text-text-faint'}
+          />
+          <p className="min-w-0 flex-1 truncate text-xs text-text-faint">
+            {tab.lastError ?? 'Session ended.'}
+          </p>
+          <Button variant="subtle" size="sm" onClick={() => void reconnect(tab.id)}>
+            <RefreshCw size={11} />
+            Reconnect
+          </Button>
         </div>
       ) : null}
+
+      <PanelComposer
+        status={tab.status}
+        permissionMode={tab.permissionMode}
+        panelFocused={panelFocused}
+        autoFocusToken={autoFocusToken}
+        onSend={(text) => void send(tab.id, text)}
+        onInterrupt={() => void interrupt(tab.id)}
+        onPermissionModeChange={(mode) => void setPermissionMode(tab.id, mode)}
+      />
     </div>
   )
 }

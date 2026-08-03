@@ -7,14 +7,15 @@ focused.
 ```
 ┌─ WorkspaceBar ──── add panel · split direction · tidy · settings ──┐
 ├──────────────────────────┬─────────────────────────────────────────┤
-│  session panel           │  terminal panel        ← accent ring    │
-│  (transcript + lanes)    │  (xterm + PTY)            = focused     │
-├──────────────────────────┴─────────────────────────────────────────┤
-│  MessageBar — retargets to the focused panel                       │
-├────────────────────────────────────────────────────────────────────┤
-│  StatusBar — focused session only                                  │
-└────────────────────────────────────────────────────────────────────┘
+│ ▸ title · model · tokens │ ▸ title · cwd            ← accent ring  │
+│   transcript             │   xterm + PTY               = focused   │
+│   ─────────────────────  │                                         │
+│   [auto] message…     ↑  │   (keystrokes go straight to the shell) │
+└──────────────────────────┴─────────────────────────────────────────┘
 ```
+
+Nothing sits at the bottom of the *window*. Input and status live inside the panels
+that own them.
 
 ## The layout is a split tree
 
@@ -80,30 +81,54 @@ and unreliable coordinates over nested children. Panels need a precise indicator
 that tracks the cursor across nested containers, so a pointer-down on the header
 captures the pointer and each move hit-tests via `elementFromPoint`.
 
-## Focus is the load-bearing concept
+## Input lives in the panel
 
-Exactly one panel is focused. It carries the only accent ring on screen, and the
-message bar sends there. Without a single unambiguous focus there'd be no way to
-know where a typed message is going — which is the whole risk of a multi-panel
-layout with one input.
+Each session panel has its own composer; terminals take keystrokes directly. There
+is no window-level input.
 
-Click a panel to focus it, or `⌘1`–`⌘9`.
+This started as one shared bar at the bottom that retargeted as focus moved, with a
+status strip beside it. The strip only existed for sessions, so **focusing a
+terminal removed a row and shifted every panel** — visible jitter on every focus
+change. Moving input into the panels removed the retargeting *and* the jitter,
+because now nothing at the window level changes when focus moves. Panel rectangles
+are byte-identical with a session focused and with a terminal focused.
 
-## The message bar retargets
+Per-session status went with it: model and token totals are in the panel header,
+and permission mode sits in the composer row — it governs what the agent may do to
+your machine, so it belongs where you commit an instruction.
 
-| Focused panel | Behaviour |
+### Understated on purpose
+
+With up to eight composers on screen, each in a fraction of the window, the
+window-bar treatment — full-width bordered shell, solid accent send button, two
+lines of keyboard hints — would tile into eight competing focal points.
+
+So each composer is a quiet filled row: no border at rest, no hint text, and a send
+button that only appears once there's something to send. The focused panel already
+carries the accent ring; the composer only lifts slightly rather than announcing
+itself again.
+
+## Focus
+
+Exactly one panel is focused, carrying the only accent ring on screen.
+
+| Action | |
 | --- | --- |
-| Session | Sends a message. Shows session status. `Esc` interrupts the turn. |
-| Terminal | Writes the line plus `\r` to the PTY — exactly like typing a command. |
+| Click a panel | Focus it |
+| `Alt+Tab` / `Ctrl+Tab` | Next panel (add `Shift` for previous) |
+| `⌘1`–`⌘9` | Focus by position |
 
-The glyph, the placeholder, and the hint text all change with the target, so you
-can tell where input is going without looking at the panel ring.
+**Keyboard focus moves the caret into the panel's input; pointer focus does not.**
+Clicking into a transcript to select text would otherwise yank the caret away
+mid-selection. The store exposes this as `focusPanel(id, viaKeyboard)`, which bumps
+an `autoFocusToken` the panels watch — a counter rather than a boolean, so switching
+back to the same panel re-focuses instead of being a no-op.
 
-**Drafts are kept per panel.** Switching panels mid-sentence doesn't discard what
-you typed; switching back restores it.
+Cycling follows **visual order** from the layout tree, not creation order, so
+`Alt+Tab` moves the way the panels look arranged.
 
-For interactive programs (`vim`, `htop`, a REPL) type **directly into the panel** —
-the message bar is line-oriented, and those need raw keystrokes.
+For interactive programs (`vim`, `htop`, a REPL) type **directly into the terminal
+panel** — its composer-free by design, and those need raw keystrokes.
 
 ## Why a real terminal
 
@@ -170,6 +195,9 @@ pgrep -fl "zsh|bash" | grep -v login
 | `⇧⌘T` | New terminal panel |
 | `⌘W` | Close focused panel |
 | `⌘1`–`⌘9` | Focus panel by position |
+| `Alt+Tab` / `Ctrl+Tab` | Cycle panels (`Shift` reverses) |
+| `Enter` | Send (in a session composer) |
+| `Esc` | Interrupt the focused session's turn |
 | `⌘,` | Appearance |
 
 Rearranging is drag-only for now — there are no keyboard commands for moving a panel
