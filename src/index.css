@@ -303,6 +303,61 @@ textarea,
   }
 }
 
+/*
+ * Activity animations (see ActivityIndicator.tsx).
+ *
+ * All three run on `transform` and `opacity` only, so they stay on the compositor
+ * and never trigger layout. That matters more here than anywhere else in the app:
+ * these animate continuously, in up to eight panels at once, while the transcript
+ * beside them is being repainted every frame by the streaming buffers.
+ */
+.activity-breathe {
+  animation: activity-breathe 1.6s ease-in-out infinite;
+}
+@keyframes activity-breathe {
+  0%,
+  100% {
+    transform: scale(0.72);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.activity-wave {
+  animation: activity-wave 1s ease-in-out infinite;
+}
+@keyframes activity-wave {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/*
+ * A rotating arc, drawn as a ring with one transparent side. `currentColor` on
+ * three borders and transparent on the fourth is the cheapest possible spinner —
+ * no SVG, no mask, no extra element.
+ */
+.activity-spin {
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: activity-spin 0.7s linear infinite;
+}
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Syntax highlighting mapped onto the active colorway. */
 .hljs-keyword,
 .hljs-selector-tag,

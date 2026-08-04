@@ -52,18 +52,25 @@ export function SessionPanel({
       )}
 
       {isEnded ? (
-        <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-1">
-          <AlertCircle
-            size={13}
-            className={tab.status === 'error' ? 'text-danger' : 'text-text-faint'}
-          />
-          <p className="min-w-0 flex-1 truncate text-xs text-text-faint">
-            {tab.lastError ?? 'Session ended.'}
-          </p>
-          <Button variant="subtle" size="sm" onClick={() => void reconnect(tab.id)}>
-            <RefreshCw size={11} />
-            Reconnect
-          </Button>
+        // Same box as the composer below it — cap first, gutter inside — so the two
+        // rows read as one block rather than two independently-inset strips.
+        <div className="shrink-0">
+          <div
+            className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] items-center gap-2
+                       px-3 pb-2 @[30rem]:px-5 @[48rem]:px-8"
+          >
+            <AlertCircle
+              size={13}
+              className={tab.status === 'error' ? 'text-danger' : 'text-text-faint'}
+            />
+            <p className="min-w-0 flex-1 truncate text-xs text-text-faint">
+              {tab.lastError ?? 'Session ended.'}
+            </p>
+            <Button variant="subtle" size="sm" onClick={() => void reconnect(tab.id)}>
+              <RefreshCw size={11} />
+              Reconnect
+            </Button>
+          </div>
         </div>
       ) : null}
 

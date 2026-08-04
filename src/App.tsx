@@ -63,6 +63,24 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [panels, focusedPanelId, addPanel, closePanel, focusPanel, cyclePanel])
 
+  /*
+   * Swallow file drops that miss a composer.
+   *
+   * A browser's default response to a dropped file is to navigate to it, and in
+   * Electron that replaces the entire app with a file viewer — every live session
+   * and terminal gone, with no way back but relaunching. Composers call
+   * `preventDefault` on their own drops; this catches everything else.
+   */
+  useEffect(() => {
+    const swallow = (event: DragEvent) => event.preventDefault()
+    window.addEventListener('dragover', swallow)
+    window.addEventListener('drop', swallow)
+    return () => {
+      window.removeEventListener('dragover', swallow)
+      window.removeEventListener('drop', swallow)
+    }
+  }, [])
+
   return (
     /*
      * Two rows only: toolbar and panels.

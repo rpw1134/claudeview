@@ -11,10 +11,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "dist": "npm run build && electron-builder",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "npm run icon && npm run build && electron-builder",
     "rebuild:native": "electron-rebuild -f -w node-pty",
     "postinstall": "electron-rebuild -f -w node-pty",
-    "test": "vite build --config test/vite.config.ts --logLevel error && node .test-dist/layoutTree.test.js"
+    "test": "vite build --config test/vite.config.ts --logLevel error && node .test-dist/index.test.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
@@ -58,6 +59,9 @@
   "build": {
     "appId": "dev.rpw1134.claudeview",
     "productName": "ClaudeView",
+    "directories": {
+      "buildResources": "build"
+    },
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -65,7 +69,15 @@
     ],
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development"
     }
   }
 }

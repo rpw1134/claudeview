@@ -1,16 +1,16 @@
 # Panels and terminals
 
-The window holds up to **8 panels** in a freely rearrangeable split layout. Each panel is either a Claude **session**
-or a **terminal**, and a single message bar at the bottom targets whichever panel is
-focused.
+The window holds up to **8 panels** in a freely rearrangeable split layout. Each
+panel is either a Claude **session** or a **terminal**, and each session panel owns
+its own composer.
 
 ```
 ┌─ WorkspaceBar ──── add panel · split direction · tidy · settings ──┐
 ├──────────────────────────┬─────────────────────────────────────────┤
-│ ▸ title · model · tokens │ ▸ title · cwd            ← accent ring  │
-│   transcript             │   xterm + PTY               = focused   │
-│   ─────────────────────  │                                         │
-│   [auto] message…     ↑  │   (keystrokes go straight to the shell) │
+│ ▪ title  ⠿ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
+│   transcript             │   xterm + PTY         this panel is     │
+│   ─────────────────────  │                       focused           │
+│   [auto] 📎 message…  ↑  │   (keystrokes go straight to the shell) │
 └──────────────────────────┴─────────────────────────────────────────┘
 ```
 
@@ -49,8 +49,12 @@ renders at half size with dead space beside it.
 keeping it out of the components. The load-bearing assertion is **coverage**: after
 any sequence of inserts, removes and moves, panel areas sum to exactly 1.
 
+The same suite covers attachment composition and the chip row, for a different
+reason: the path that *produces* chips can't be automated (a real path needs a real
+drop), so the component is rendered directly instead.
+
 ```
-29 passed, 0 failed
+49 passed, 0 failed
 ```
 
 ## Rearranging
@@ -104,13 +108,84 @@ window-bar treatment — full-width bordered shell, solid accent send button, tw
 lines of keyboard hints — would tile into eight competing focal points.
 
 So each composer is a quiet filled row: no border at rest, no hint text, and a send
-button that only appears once there's something to send. The focused panel already
-carries the accent ring; the composer only lifts slightly rather than announcing
-itself again.
+button that only appears once there's something to send. The focused panel's header
+icon already says which one is live; the composer only lifts slightly rather than
+announcing itself again.
+
+### Width follows the panel, not the window
+
+Once you can split eight ways, the window's width says nothing about how much room
+a given composer has. So the gutters are `@container` queries against the **panel**:
+
+| Panel width | Gutter |
+| --- | --- |
+| < 30rem | 12px |
+| 30–48rem | 20px |
+| ≥ 48rem | 32px |
+
+The transcript uses the same three values, and both cap at the same
+`measure + 8rem` box — so the composer shell lines up under the prose at every
+density, and its right edge lines up with the user bubbles and tool rows above it.
+
+**The nesting order is load-bearing.** Padding applied *outside* the width cap
+offsets the composer from the prose by exactly the gutter width. Measured before the
+fix: prose at x=268, composer shell at x=236. Cap first, gutter inside.
+
+## Attachments
+
+Drop files or folders onto a composer, or click the paperclip (`⌥`-click for
+folders — macOS won't offer files and folders in one dialog without the selection
+rules going ambiguous).
+
+Attachments are sent as **paths, not contents**. The agent already has file tools
+and a permission model, so a path lets it read exactly what it needs, when it needs
+it. Inlining bytes would blow up the turn on a large file, make a folder attachment
+meaningless, and route the read around the permission mode chosen in that same
+composer row.
+
+A dropped `File` no longer carries `.path` — Electron removed it in v32 so a
+compromised renderer can't read arbitrary disk locations out of a drop. The path is
+requested explicitly from the preload bridge via `webUtils.getPathForFile`, which is
+the point: the renderer gets paths only for files the user physically dropped.
+
+Dragging *text* rather than a file inserts it into the message instead — a path
+copied from a terminal isn't a file reference.
+
+A stray drop that misses a composer is swallowed at the window level. A browser's
+default response to a dropped file is to navigate to it, which in Electron replaces
+the whole app — every live session and terminal gone, with no way back but a
+relaunch.
+
+## Activity
+
+While a turn is running, the panel header shows a moving glyph, what the agent is
+doing, and how long it's been doing it:
+
+| Phase | Glyph |
+| --- | --- |
+| Thinking / starting | a slow breathing dot |
+| Writing | a left-to-right wave |
+| Running a tool | a rotating arc |
+
+A long turn is indistinguishable from a hung one if nothing moves, which is why the
+terminal client shows a spinner and a clock. Shape and motion carry the phase, not
+colour — the whole indicator is one accent hue. Narrow panels keep the glyph and
+drop the word and the clock.
+
+All three animate `transform` and `opacity` only, so they stay on the compositor and
+never trigger layout — they run continuously, in up to eight panels, beside a
+transcript already being repainted every frame.
 
 ## Focus
 
-Exactly one panel is focused, carrying the only accent ring on screen.
+Exactly one panel is focused. It's marked by the **panel's own type icon, top left
+of its header, in the accent colour** — the only thing in any header that changes
+colour.
+
+This used to be an accent ring around the whole panel. At eight panels that ring is
+a large bright rectangle competing with the content inside it, and it only ever says
+one bit. Colour isn't the sole carrier: the focused panel's title also sits at full
+contrast while the rest stay muted.
 
 | Action | |
 | --- | --- |
@@ -198,6 +273,7 @@ pgrep -fl "zsh|bash" | grep -v login
 | `Alt+Tab` / `Ctrl+Tab` | Cycle panels (`Shift` reverses) |
 | `Enter` | Send (in a session composer) |
 | `Esc` | Interrupt the focused session's turn |
+| Paperclip / `⌥`-click | Attach files / folders |
 | `⌘,` | Appearance |
 
 Rearranging is drag-only for now — there are no keyboard commands for moving a panel

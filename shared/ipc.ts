@@ -208,6 +208,15 @@ export type IpcCalls = {
   'session:close': [{ tabId: string }, void]
   'sessions:list': [{ cwd?: string; limit?: number }, SessionSummary[]]
   'app:pick-directory': [void, string | null]
+  /**
+   * Choose files or folders to attach to a message. Returns absolute paths.
+   *
+   * The renderer never reads the files — it only passes paths to the agent, which
+   * has its own filesystem tools and its own permission model. Sending contents
+   * across IPC would duplicate that for no benefit and put arbitrary file bytes
+   * through the renderer, which renders untrusted markdown.
+   */
+  'app:pick-attachments': [{ directories?: boolean }, string[]]
 
   'terminal:create': [{ id: string; cwd?: string; cols?: number; rows?: number }, void]
   'terminal:write': [{ id: string; data: string }, void]
@@ -249,4 +258,13 @@ export type Api = {
   onStreamEvent: (handler: (envelope: StreamEnvelope) => void) => () => void
   /** Same contract as `onStreamEvent`: the returned function MUST be called. */
   onTerminalEvent: (handler: (envelope: TerminalEnvelope) => void) => () => void
+  /**
+   * Absolute paths for files dropped onto the window.
+   *
+   * A dropped `File` no longer carries `.path` — Electron removed it in v32 to stop
+   * a compromised renderer reading arbitrary disk locations out of a drop. The path
+   * now has to be requested explicitly from the preload bridge, which is the whole
+   * point: the renderer receives paths only for files the user physically dropped.
+   */
+  resolveDroppedPaths: (files: File[]) => string[]
 }

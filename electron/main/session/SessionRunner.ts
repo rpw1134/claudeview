@@ -1,10 +1,19 @@
 // Loaded via ../sdk rather than directly — a static ESM import of the Agent SDK
 // deadlocks Electron's main process. See electron/main/sdk.ts for the details.
-import { getSessionMessages, query, type Options, type Query, type SDKUserMessage } from '../sdk'
+import {
+  getSessionMessages,
+  getSubagentMessages,
+  query,
+  type Options,
+  type Query,
+  type SDKUserMessage,
+  type SessionMessage,
+} from '../sdk'
 import type { CreateSessionRequest, PermissionMode, StreamEvent } from '../../../shared/ipc'
 import { AsyncMessageQueue } from './AsyncMessageQueue'
 import { EventBatcher } from './EventBatcher'
 import { MessageNormalizer } from './MessageNormalizer'
+import { listSubagentLanes } from './subagentTranscripts'
 
 /**
  * Compile-time check that our hand-written `PermissionMode` still matches the
@@ -135,18 +144,12 @@ export class SessionRunner {
   private async hydrateHistory(sessionId: string): Promise<void> {
     try {
       const stored = await getSessionMessages(sessionId, { dir: this.request.cwd })
-      if (this.disposed || stored.length === 0) return
+      if (this.disposed) return
 
-      // Cap the replay. Long sessions run to thousands of messages, and rebuilding
-      // all of them costs IPC payload and renderer nodes for scrollback nobody
-      // reads. The tail is the part that provides context for what comes next.
-      const tail =
-        stored.length > SessionRunner.MAX_HISTORY_MESSAGES
-          ? stored.slice(-SessionRunner.MAX_HISTORY_MESSAGES)
-          : stored
-
-      const events = this.normalizer.normalizeHistory(tail)
-      if (events.length > 0) this.batcher.add(events)
+      if (stored.length > 0) {
+        const events = this.normalizer.normalizeHistory(this.tail(stored))
+        if (events.length > 0) this.batcher.add(events)
+      }
     } catch (error) {
       // A missing or unreadable transcript must not block the session — the user
       // can still continue the conversation, just without visible scrollback.
@@ -155,6 +158,71 @@ export class SessionRunner {
         message: `Could not load previous messages: ${describeError(error)}`,
       })
     }
+
+    await this.hydrateSubagents(sessionId)
+  }
+
+  /**
+   * Replay each subagent's transcript into its own lane.
+   *
+   * Separate from the main replay because subagent conversations live in separate
+   * transcript files — `getSessionMessages()` returns the main thread only. Without
+   * this, resuming a session that had used subagents showed their Task rows in the
+   * main transcript with an "Open" button leading to an empty lane: the work was
+   * visibly referenced and not visibly there.
+   *
+   * Failures here are swallowed rather than surfaced. The main conversation has
+   * already replayed by this point, and a missing subagent transcript is a gap in
+   * supporting detail — not something worth putting an error row in front of.
+   */
+  private async hydrateSubagents(sessionId: string): Promise<void> {
+    let lanes
+    try {
+      lanes = await listSubagentLanes(sessionId, this.request.cwd)
+    } catch {
+      return
+    }
+    if (this.disposed || lanes.length === 0) return
+
+    for (const lane of lanes) {
+      if (this.disposed) return
+
+      // Prefer the spawning tool call's id: it's what the live path uses, so the
+      // Task row in the main transcript links straight to this lane. The agent id
+      // is the fallback when no sidecar meta was written.
+      const agent = { id: lane.toolUseId ?? lane.agentId, type: lane.agentType }
+
+      try {
+        const stored = await getSubagentMessages(sessionId, lane.agentId, {
+          dir: this.request.cwd,
+        })
+        if (this.disposed || stored.length === 0) continue
+
+        const events = [
+          ...this.normalizer.announceLane(agent, lane.description),
+          ...this.normalizer.normalizeHistory(this.tail(stored), agent),
+          // A replayed subagent has by definition finished, so its lane opens
+          // closed — otherwise every resumed lane shows a live "running" pulse.
+          ...this.normalizer.closeLane(agent),
+        ]
+        if (events.length > 0) this.batcher.add(events)
+      } catch {
+        // Skip this lane; the others still replay.
+      }
+    }
+  }
+
+  /**
+   * Cap a replay to its most recent messages.
+   *
+   * Long sessions run to thousands of messages, and rebuilding all of them costs
+   * IPC payload and renderer nodes for scrollback nobody reads. The tail is the
+   * part that provides context for what comes next.
+   */
+  private tail(messages: SessionMessage[]): SessionMessage[] {
+    return messages.length > SessionRunner.MAX_HISTORY_MESSAGES
+      ? messages.slice(-SessionRunner.MAX_HISTORY_MESSAGES)
+      : messages
   }
 
   private buildOptions(): Options {

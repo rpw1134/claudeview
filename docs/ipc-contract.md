@@ -19,7 +19,14 @@ runtime — importing the Agent SDK there would drag Node-only code into the ren
 | `session:close` | `{tabId}` | `void` |
 | `sessions:list` | `{cwd?, limit?}` | `SessionSummary[]` |
 | `app:pick-directory` | — | `string \| null` |
+| `app:pick-attachments` | `{directories?}` | `string[]` |
 | `app:info` | — | `{cwd, version, home}` |
+
+The bridge also exposes one **synchronous** function, `resolveDroppedPaths(files)`.
+It wraps `webUtils.getPathForFile`, which lives in the Electron module the renderer
+must never hold; handing back only the resolved strings keeps the capability behind
+the bridge. It's the only way to learn a dropped file's path since Electron 32
+removed `File.path`.
 
 **Main → renderer** is a single push channel, `session:event`, carrying
 `StreamEnvelope`:
@@ -55,7 +62,7 @@ Twelve variants, closed. Ordered roughly by how hot the path is.
 | `thinking-delta` | Extended thinking, separate so the UI can collapse it |
 | `block-end` | Content block complete; the renderer stops its typewriter drain |
 | `session-init` | Session id, model, cwd, permission mode, tools. Once per session |
-| `status` | Lifecycle for the status bar and tab dots |
+| `status` | Lifecycle, driving the panel header's activity indicator |
 | `tool-start` / `tool-end` | Tool call lifecycle. Payloads pre-truncated in main |
 | `agent-start` / `agent-end` | A subagent lane opened / closed |
 | `user-message` | Echo of a user turn, so the transcript owns the conversation |

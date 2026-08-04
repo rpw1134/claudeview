@@ -32,13 +32,25 @@ export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: 
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={ref} className="h-full overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] flex-col px-8 py-8">
+        {/*
+          Padding tracks the panel's own width, not the window's — 32px of gutter is
+          generous in a full-width panel and eats a one-eighth panel alive. The
+          breakpoints match the composer's exactly, so the input shell lines up under
+          the prose at every density.
+
+          The narrow floor is 12px because rows that bleed (tool calls, hover fills)
+          use `-mx-3`; anything tighter and they'd overhang the scroll container.
+        */}
+        <div
+          className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] flex-col
+                     px-3 py-4 @[30rem]:px-5 @[30rem]:py-6 @[48rem]:px-8 @[48rem]:py-8"
+        >
           {lane.items.length === 0 ? <EmptyLane /> : null}
           {lane.items.map((item) => (
             <TranscriptRow key={item.id} item={item} onOpenLane={onOpenLane} />
           ))}
           {/* Room so the last line never sits against the composer. */}
-          <div className="h-8" aria-hidden />
+          <div className="h-6" aria-hidden />
         </div>
       </div>
 
@@ -131,7 +143,7 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
 
 function EmptyLane() {
   return (
-    <p className="py-24 text-center text-sm text-text-faint">
+    <p className="py-10 text-center text-sm text-text-faint @[30rem]:py-20">
       Nothing here yet — send a message to get started.
     </p>
   )

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SessionManager } from './session/SessionManager'
@@ -12,6 +13,24 @@ const DIST_ELECTRON = path.join(dirname, '..')
 const DIST_RENDERER = path.join(DIST_ELECTRON, '../dist')
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
+/**
+ * App identity.
+ *
+ * In development Electron reports itself as "Electron" — that name reaches the
+ * macOS menu bar, the About panel, `~/Library/Application Support`, and every
+ * notification. Setting it before `whenReady()` is what makes the dev app and the
+ * packaged app the same product rather than a generic shell running our code.
+ *
+ * Packaged builds take the name from electron-builder's `productName`; setting it
+ * here as well costs nothing and keeps the two identical.
+ */
+const APP_NAME = 'ClaudeView'
+app.setName(APP_NAME)
+
+// Regenerate with `npm run icon`. Packaged macOS builds get the .icns via
+// electron-builder's `build/` convention; this path is what dresses the dev dock.
+const ICON_PATH = path.join(DIST_ELECTRON, '../build/icon.png')
+
 let window: BrowserWindow | null = null
 const sessions = new SessionManager(() => window?.webContents ?? null)
 const terminals = new TerminalManager(() => window?.webContents ?? null)
@@ -23,6 +42,8 @@ function createWindow(): void {
     minWidth: 720,
     minHeight: 480,
     show: false,
+    title: APP_NAME,
+    icon: ICON_PATH,
     // Frameless-ish chrome on macOS: keeps the traffic lights but lets the tab
     // strip occupy the title bar area.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
@@ -41,6 +62,7 @@ function createWindow(): void {
 
   // Avoid a white flash before React paints.
   window.once('ready-to-show', () => window?.show())
+
 
   // Any link the model emits opens in the real browser, never in-app — an in-app
   // navigation would replace the UI with an attacker-influenced page.
@@ -88,6 +110,12 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(() => {
+    // The dock reads its image from here, not from the BrowserWindow, so a dev run
+    // shows the Electron logo without this.
+    if (process.platform === 'darwin' && fs.existsSync(ICON_PATH)) {
+      app.dock?.setIcon(ICON_PATH)
+    }
+
     registerIpc(sessions, terminals, () => window)
     createWindow()
 

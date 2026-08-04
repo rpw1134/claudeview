@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { ArrowUp, Folder, FileText, Paperclip, Square, X } from 'lucide-react'
 import type { PermissionMode, SessionStatus } from '@shared/ipc'
+import { api } from '@/lib/api'
+import { basename, composeMessage, mergeAttachments } from '@/lib/attachments'
 import { cn } from '@/lib/utils'
 
 const MAX_HEIGHT_PX = 120
 const MIN_HEIGHT_PX = 28
+/** Attachments are path references, not uploads, so the cap is about legibility. */
+const MAX_ATTACHMENTS = 20
 
 const PERMISSION_OPTIONS: { value: PermissionMode; label: string }[] = [
   { value: 'auto', label: 'Auto' },
@@ -26,16 +30,23 @@ const PERMISSION_OPTIONS: { value: PermissionMode; label: string }[] = [
  * retargeting *and* the jitter: nothing at the window level changes when focus
  * moves, because there is nothing at the window level.
  *
+ * ## Width follows the panel, not the window
+ *
+ * A composer stretched edge to edge looks unfinished in a wide panel and cramped in
+ * a narrow one — and the panel's width has nothing to do with the window's once you
+ * can split eight ways. So the spacing is driven by `@container` queries against the
+ * panel: a full-width panel gets generous inset and caps at the transcript's reading
+ * measure, so the input lines up with the prose above it; a one-eighth panel
+ * collapses to a tight 8px gutter. Same component, three densities.
+ *
  * ## Deliberately understated
  *
- * With up to eight of these on screen, each in a fraction of the window, the old
- * treatment — a full-width bordered shell, a solid accent send button, two lines of
- * keyboard hints — would tile into eight competing focal points. This is a quiet
- * filled row with no border at rest, a send button that only appears once there's
- * something to send, and no hint text. It states its presence and nothing more.
- *
- * The focused panel already carries the accent ring, so this only needs to lift
- * slightly on focus rather than announce itself again.
+ * With up to eight of these on screen the old treatment — a full-width bordered
+ * shell, a solid accent send button, two lines of keyboard hints — would tile into
+ * eight competing focal points. This is a quiet filled row with no border at rest, a
+ * send button that only appears once there's something to send, and no hint text.
+ * The focused panel's header icon already says which panel is live, so this only
+ * lifts slightly on focus rather than announcing itself again.
  */
 export function PanelComposer({
   status,
@@ -60,7 +71,12 @@ export function PanelComposer({
   onPermissionModeChange: (mode: PermissionMode) => void
 }) {
   const [value, setValue] = useState('')
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [dropActive, setDropActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Drag events fire for every child element crossing the pointer, so a plain
+  // enter/leave pair flickers. Counting depth is the standard fix.
+  const dragDepth = useRef(0)
 
   const isBusy = status === 'thinking' || status === 'streaming' || status === 'tool'
   const disabled = status === 'closed' || status === 'error'
@@ -78,13 +94,51 @@ export function PanelComposer({
     if (autoFocusToken > 0 && !disabled) textareaRef.current?.focus()
   }, [autoFocusToken, disabled])
 
+  const addAttachments = useCallback((paths: string[]) => {
+    if (paths.length === 0) return
+    setAttachments((existing) => mergeAttachments(existing, paths, MAX_ATTACHMENTS))
+    textareaRef.current?.focus()
+  }, [])
+
+  const pickAttachments = useCallback(
+    async (directories: boolean) => {
+      addAttachments(await api['app:pick-attachments']({ directories }))
+    },
+    [addAttachments],
+  )
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+      dragDepth.current = 0
+      setDropActive(false)
+      if (disabled) return
+
+      const files = Array.from(event.dataTransfer.files)
+      if (files.length > 0) {
+        // Resolved in the preload bridge: `File.path` was removed in Electron 32,
+        // so the real path has to be requested for each dropped file explicitly.
+        addAttachments(api.resolveDroppedPaths(files))
+        return
+      }
+
+      // Dragging text (a path from a terminal, a snippet from the transcript)
+      // inserts rather than attaches — it isn't a file reference.
+      const text = event.dataTransfer.getData('text/plain')
+      if (text) setValue((current) => (current ? `${current} ${text}` : text))
+    },
+    [addAttachments, disabled],
+  )
+
   const submit = useCallback(() => {
     const text = value.trim()
-    if (!text || disabled) return
-    onSend(text)
+    if ((!text && attachments.length === 0) || disabled) return
+
+    onSend(composeMessage(text, attachments))
     setValue('')
+    setAttachments([])
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [value, disabled, onSend])
+  }, [value, attachments, disabled, onSend])
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -101,86 +155,179 @@ export function PanelComposer({
     [submit, isBusy, onInterrupt],
   )
 
-  const canSend = value.trim().length > 0 && !disabled
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
 
   return (
-    <div className="shrink-0 px-2 pb-2">
+    <div className="shrink-0">
+      {/*
+        Same box as the transcript: capped at the reading measure, centred, with the
+        gutter applied *inside* the cap. The nesting order matters — padding outside
+        the cap offsets the composer from the prose by exactly the gutter width
+        (measured: prose at x=268, shell at x=236), which reads as a misalignment
+        rather than as an inset.
+      */}
       <div
-        data-focus-host
-        className={cn(
-          'flex items-end gap-1 rounded-md px-1.5 py-1 transition-colors duration-150',
-          // No border at rest. The panel ring already says which one is live; a
-          // second outline per panel is what made eight of these feel loud.
-          panelFocused ? 'bg-raised' : 'bg-raised/50',
-          'focus-within:bg-raised focus-within:ring-1 focus-within:ring-accent/50',
-          disabled && 'opacity-50',
-        )}
+        className="mx-auto w-full max-w-[calc(var(--measure)+8rem)]
+                   px-3 pb-3 @[30rem]:px-5 @[48rem]:px-8 @[48rem]:pb-4"
       >
-        {/*
-          Permission mode sits with the input rather than in a status strip: it
-          governs what the agent may do to your machine, so it belongs where you
-          commit an instruction, and it's the only per-session control small enough
-          to live here.
-        */}
-        <select
-          aria-label="Permission mode"
-          value={permissionMode}
-          onChange={(event) => onPermissionModeChange(event.target.value as PermissionMode)}
-          disabled={disabled}
+        <div
+          data-focus-host
+          onDragEnter={(event) => {
+            event.preventDefault()
+            dragDepth.current += 1
+            if (!disabled) setDropActive(true)
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={() => {
+            dragDepth.current -= 1
+            if (dragDepth.current <= 0) setDropActive(false)
+          }}
+          onDrop={onDrop}
           className={cn(
-            'h-6 shrink-0 rounded-sm border-none bg-transparent pl-1 pr-0 text-xs outline-none',
-            permissionMode === 'bypassPermissions' || permissionMode === 'dontAsk'
-              ? 'text-warning'
-              : 'text-text-faint hover:text-text-muted',
+            'rounded-md transition-colors duration-150',
+            // No border at rest. The panel's header icon already says which one is
+            // live; a second outline per panel is what made eight of these loud.
+            panelFocused ? 'bg-raised' : 'bg-raised/50',
+            'focus-within:bg-raised focus-within:ring-1 focus-within:ring-accent/50',
+            dropActive && 'ring-1 ring-accent',
+            disabled && 'opacity-50',
           )}
         >
-          {PERMISSION_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          {attachments.length > 0 ? (
+            <AttachmentChips
+              paths={attachments}
+              onRemove={(path) =>
+                setAttachments((existing) => existing.filter((entry) => entry !== path))
+              }
+            />
+          ) : null}
 
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={onKeyDown}
-          disabled={disabled}
-          rows={1}
-          placeholder={
-            disabled ? 'Session ended' : isBusy ? 'Queue a follow-up…' : 'Message…'
-          }
-          aria-label="Message"
-          style={{ minHeight: MIN_HEIGHT_PX }}
-          className="flex-1 resize-none border-none bg-transparent px-1 py-1 text-sm leading-5
-                     text-text outline-none placeholder:text-text-faint"
-        />
+          <div className="flex items-end gap-1 px-1.5 py-1">
+            {/*
+              Permission mode sits with the input rather than in a status strip: it
+              governs what the agent may do to your machine, so it belongs where you
+              commit an instruction.
+            */}
+            <select
+              aria-label="Permission mode"
+              value={permissionMode}
+              onChange={(event) => onPermissionModeChange(event.target.value as PermissionMode)}
+              disabled={disabled}
+              className={cn(
+                'h-6 shrink-0 rounded-sm border-none bg-transparent pl-1 pr-0 text-xs outline-none',
+                permissionMode === 'bypassPermissions' || permissionMode === 'dontAsk'
+                  ? 'text-warning'
+                  : 'text-text-faint hover:text-text-muted',
+              )}
+            >
+              {PERMISSION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-        {/* Only present when it has something to do. An always-visible solid
-            button per panel is a row of accent blocks competing for attention. */}
-        {isBusy ? (
-          <button
-            onClick={onInterrupt}
-            aria-label="Stop generating"
-            title="Stop (Esc)"
-            className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
-                       text-text-muted transition-colors hover:bg-overlay hover:text-text"
-          >
-            <Square size={10} className="fill-current" />
-          </button>
-        ) : canSend ? (
-          <button
-            onClick={submit}
-            aria-label="Send message"
-            title="Send (Enter)"
-            className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
-                       bg-accent text-accent-contrast transition-opacity hover:opacity-90"
-          >
-            <ArrowUp size={12} />
-          </button>
-        ) : null}
+            <button
+              // Alt opens the folder picker. macOS won't offer files and folders in
+              // one panel without the selection rules going ambiguous, so the two
+              // are separate dialogs — and dragging a folder in works either way.
+              onClick={(event) => void pickAttachments(event.altKey)}
+              disabled={disabled}
+              aria-label="Attach files"
+              title="Attach files (⌥ for folders, or drop them here)"
+              className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+                         text-text-faint transition-colors hover:bg-overlay hover:text-text-muted"
+            >
+              <Paperclip size={13} />
+            </button>
+
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              onKeyDown={onKeyDown}
+              disabled={disabled}
+              rows={1}
+              placeholder={
+                disabled ? 'Session ended' : isBusy ? 'Queue a follow-up…' : 'Message…'
+              }
+              aria-label="Message"
+              style={{ minHeight: MIN_HEIGHT_PX }}
+              className="flex-1 resize-none border-none bg-transparent px-1 py-1 text-sm leading-5
+                         text-text outline-none placeholder:text-text-faint"
+            />
+
+            {/* Only present when it has something to do. An always-visible solid
+                button per panel is a row of accent blocks competing for attention. */}
+            {isBusy ? (
+              <button
+                onClick={onInterrupt}
+                aria-label="Stop generating"
+                title="Stop (Esc)"
+                className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+                           text-text-muted transition-colors hover:bg-overlay hover:text-text"
+              >
+                <Square size={10} className="fill-current" />
+              </button>
+            ) : canSend ? (
+              <button
+                onClick={submit}
+                aria-label="Send message"
+                title="Send (Enter)"
+                className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+                           bg-accent text-accent-contrast transition-opacity hover:opacity-90"
+              >
+                <ArrowUp size={12} />
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
+
+/**
+ * Attached paths, as removable chips above the input.
+ *
+ * Basename only — a column of absolute paths in a narrow panel is unreadable and
+ * wraps the composer to three lines. The full path is the tooltip, and it's in the
+ * message the agent receives either way.
+ */
+export function AttachmentChips({
+  paths,
+  onRemove,
+}: {
+  paths: string[]
+  onRemove: (path: string) => void
+}) {
+  return (
+    <ul className="flex flex-wrap gap-1 px-1.5 pb-0.5 pt-1.5">
+      {paths.map((path) => {
+        const isDirectory = !basename(path).includes('.')
+        const Icon = isDirectory ? Folder : FileText
+
+        return (
+          <li key={path}>
+            <span
+              title={path}
+              className="flex h-6 items-center gap-1.5 rounded-sm bg-overlay pl-1.5 pr-1
+                         text-xs text-text-muted"
+            >
+              <Icon size={11} className="shrink-0 text-text-faint" aria-hidden />
+              <span className="max-w-40 truncate">{basename(path)}</span>
+              <button
+                onClick={() => onRemove(path)}
+                aria-label={`Remove ${basename(path)}`}
+                className="rounded-sm p-0.5 text-text-faint transition-colors hover:text-text"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+

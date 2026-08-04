@@ -13,11 +13,7 @@ import {
   movePanel, removePanel, setRatio, swapPanels, type LayoutNode,
 } from '@/lib/layoutTree'
 
-let pass = 0, fail = 0
-const check = (name: string, cond: boolean, extra = '') => {
-  if (cond) { pass++; console.log('  PASS ' + name) }
-  else { fail++; console.log('  FAIL ' + name + (extra ? ' -> ' + extra : '')) }
-}
+import { check } from './harness'
 /** Total area each panel occupies, to prove the tree always fills the viewport. */
 function areas(node: LayoutNode | null, w = 1, h = 1, acc: Record<string, number> = {}) {
   if (!node) return acc
@@ -102,6 +98,3 @@ check('8 panels present', collectPanelIds(big).length === 8, String(collectPanel
 check('8-panel layout fills viewport', Math.abs(sum(areas(big)) - 1) < 1e-9, String(sum(areas(big))))
 for (let i = 0; i < 8; i++) big = removePanel(big, `p${i}`)
 check('all removed cleanly', big === null)
-
-console.log(`\n${pass} passed, ${fail} failed`)
-process.exit(fail === 0 ? 0 : 1)

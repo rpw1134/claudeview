@@ -82,6 +82,24 @@ export function registerIpc(
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
+  /**
+   * Attachment picker. `directories` swaps the dialog between files and folders
+   * because macOS will not offer both in one panel without the selection rules
+   * becoming ambiguous — you get a picker that accepts either and communicates
+   * neither.
+   */
+  handle('app:pick-attachments', async ({ directories }) => {
+    const window = getWindow()
+    if (!window) return []
+    const result = await dialog.showOpenDialog(window, {
+      properties: directories
+        ? ['openDirectory', 'multiSelections']
+        : ['openFile', 'multiSelections'],
+      title: directories ? 'Attach folders' : 'Attach files',
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
   handle('terminal:create', ({ id, cwd, cols, rows }) => {
     terminals.create(id, { cwd, cols, rows })
   })
@@ -118,6 +136,7 @@ export function unregisterIpc(): void {
     'session:close',
     'sessions:list',
     'app:pick-directory',
+    'app:pick-attachments',
     'app:info',
     'terminal:create',
     'terminal:write',

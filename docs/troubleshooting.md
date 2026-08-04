@@ -148,11 +148,27 @@ won't:
   through the same path as live messages so tool calls and thinking blocks
   reconstruct.
 
-**Known limitation.** Replayed transcripts reconstruct the *main* thread only.
-Subagent output lives in separate per-subagent transcripts (`getSubagentMessages`),
-which the hydration path doesn't read yet — so on a resumed session the Task tool
-call appears but its subagent lane does not. Live subagent lanes are unaffected.
-Replay is also capped at the last `MAX_HISTORY_MESSAGES` (400) messages.
+- also replays every **subagent** transcript into its own lane. Those live in
+  separate files, so `getSessionMessages()` returns the main thread and nothing
+  else; `hydrateSubagents()` walks `listSubagents()` and reads each one.
+
+**The agent-id / tool-use-id mismatch.** Lanes are keyed by the `tool_use.id` of
+the Task call that spawned them — that's what the live path has, and it's what lets
+a Task row carry an "Open" button. But `listSubagents()` returns *agent* ids, and a
+subagent's own transcript never records which Task call spawned it. The link lives
+in a sidecar the CLI writes beside each transcript:
+
+```
+~/.claude/projects/<project>/<sessionId>/subagents/agent-<agentId>.meta.json
+{ "agentType": "Explore", "description": "…", "toolUseId": "toolu_…", "spawnDepth": 1 }
+```
+
+`subagentTranscripts.ts` reads it, which is what makes a resumed lane carry the same
+id, type, and description it had live. Without the sidecar the lane still replays,
+keyed by agent id — it just loses the "Open" link from the spawning row.
+
+**Known limitation.** Replay is capped at the last `MAX_HISTORY_MESSAGES` (400)
+messages, per lane.
 
 ---
 

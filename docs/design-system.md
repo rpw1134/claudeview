@@ -12,7 +12,7 @@ Five levels, each a step on one lightness ramp:
 | Token | Role |
 | --- | --- |
 | `--bg` | The window. The transcript sits directly on it. |
-| `--surface` | Panels: tab strip, composer region, status bar, expanded tool calls. |
+| `--surface` | Panels: toolbar, panel headers, expanded tool calls. |
 | `--raised` | Controls and objects: buttons, active tabs, user bubbles, input fields. |
 | `--overlay` | Floating things: dialogs, hover state on raised controls. |
 | `--line` / `--line-strong` | Dividers / control boundaries. |

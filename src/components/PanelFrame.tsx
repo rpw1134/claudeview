@@ -1,9 +1,10 @@
 import { memo } from 'react'
-import { GripVertical, MessagesSquare, SquareTerminal, X } from 'lucide-react'
+import { MessagesSquare, SquareTerminal, X } from 'lucide-react'
 import type { Panel } from '@/stores/workspaceStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
+import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
 import { Button } from './ui/Button'
 import { cn, compactTokens, shortenPath } from '@/lib/utils'
 
@@ -14,6 +15,17 @@ import { cn, compactTokens, shortenPath } from '@/lib/utils'
  * every interaction inside it — selecting transcript text, clicking a tool call,
  * typing in a terminal — so the grab affordance is confined to a strip that has no
  * other job.
+ *
+ * ## Focus is the leading icon
+ *
+ * Focus used to be an accent ring around the whole panel. At eight panels that ring
+ * is a large, bright rectangle competing with the content inside it, and it only
+ * ever says one bit. Now the panel's own type icon — top left, first thing in the
+ * header — turns accent when focused and stays faint when not.
+ *
+ * Colour isn't the only carrier: the focused panel's title also moves to full
+ * contrast while the others sit at muted. One glance finds the live panel; nothing
+ * on screen has to grow a border to say so.
  */
 export const PanelFrame = memo(function PanelFrame({
   panel,
@@ -40,7 +52,7 @@ export const PanelFrame = memo(function PanelFrame({
 
   const title = tab?.title ?? panel.title
   const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
-  const isBusy = tab?.status === 'thinking' || tab?.status === 'streaming' || tab?.status === 'tool'
+  const isBusy = tab ? isBusyStatus(tab.status) : false
 
   // Model and token totals used to live in a window-level status strip. They're
   // per-session facts, so they belong on the session's own header — and keeping
@@ -54,30 +66,36 @@ export const PanelFrame = memo(function PanelFrame({
     <section
       onMouseDownCapture={onFocus}
       aria-label={title}
-      // `@container` so the header can drop the cwd in a narrow panel.
-      className={cn(
-        '@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface',
-        // The focused panel carries the only ring on screen, and it encodes
-        // something real: where the message bar will send.
-        focused ? 'ring-1 ring-accent' : 'ring-1 ring-transparent',
-      )}
+      aria-current={focused ? 'true' : undefined}
+      // `@container` so the header and the composer can adapt to the panel's own
+      // width rather than the window's — a half-width panel and a one-eighth panel
+      // need different treatments at the same viewport size.
+      className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface"
     >
       <header
         onPointerDown={onHeaderPointerDown}
-        className={cn(
-          'group flex h-8 shrink-0 cursor-grab items-center gap-2 px-2 text-xs active:cursor-grabbing',
-          focused ? 'text-text' : 'text-text-muted',
-        )}
+        className="flex h-8 shrink-0 cursor-grab items-center gap-2 px-2 text-xs active:cursor-grabbing"
       >
-        <GripVertical
-          size={12}
-          className="shrink-0 text-text-faint opacity-0 transition-opacity group-hover:opacity-100"
+        {/* The focus indicator. First element, hard left, and the only thing in the
+            header that changes colour. */}
+        <Icon
+          size={13}
+          className={cn(
+            'shrink-0 transition-colors duration-150',
+            focused ? 'text-accent' : 'text-text-faint',
+          )}
           aria-hidden
         />
-        <Icon size={13} className="shrink-0 text-text-faint" />
-        <span className="truncate">{title}</span>
-        {isBusy ? (
-          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" aria-hidden />
+
+        <span className={cn('truncate', focused ? 'text-text' : 'text-text-muted')}>{title}</span>
+
+        {/* Activity sits next to the title, where the eye already is. Narrow panels
+            keep the glyph and drop the word and clock. */}
+        {tab && isBusy ? (
+          <>
+            <ActivityIndicator status={tab.status} compact className="@[26rem]:hidden" />
+            <ActivityIndicator status={tab.status} className="hidden @[26rem]:flex" />
+          </>
         ) : null}
 
         <span
@@ -86,10 +104,10 @@ export const PanelFrame = memo(function PanelFrame({
         >
           {/* Metadata first: it changes as you work, whereas cwd is fixed and
               already implied by the session's title. Narrow panels drop the cwd. */}
-          {meta ? <span>{meta}</span> : null}
-          {meta && panel.cwd ? <span className="mx-1 opacity-50">·</span> : null}
+          {meta ? <span className="hidden @[20rem]:inline">{meta}</span> : null}
+          {meta && panel.cwd ? <span className="mx-1 hidden opacity-50 @[28rem]:inline">·</span> : null}
           {panel.cwd ? (
-            <span className="hidden @[22rem]:inline">{shortenPath(panel.cwd, home)}</span>
+            <span className="hidden @[28rem]:inline">{shortenPath(panel.cwd, home)}</span>
           ) : null}
         </span>
 

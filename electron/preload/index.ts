@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { Api, StreamEnvelope, TerminalEnvelope } from '../../shared/ipc'
 import { STREAM_CHANNEL, TERMINAL_CHANNEL } from '../../shared/ipc'
 
@@ -21,6 +21,7 @@ const api: Api = {
   'session:close': (payload) => ipcRenderer.invoke('session:close', payload),
   'sessions:list': (payload) => ipcRenderer.invoke('sessions:list', payload),
   'app:pick-directory': () => ipcRenderer.invoke('app:pick-directory'),
+  'app:pick-attachments': (payload) => ipcRenderer.invoke('app:pick-attachments', payload),
   'terminal:create': (payload) => ipcRenderer.invoke('terminal:create', payload),
   'terminal:write': (payload) => ipcRenderer.invoke('terminal:write', payload),
   'terminal:resize': (payload) => ipcRenderer.invoke('terminal:resize', payload),
@@ -41,6 +42,12 @@ const api: Api = {
     ipcRenderer.on(TERMINAL_CHANNEL, listener)
     return () => ipcRenderer.removeListener(TERMINAL_CHANNEL, listener)
   },
+
+  // `webUtils` lives here rather than in the renderer because it is part of the
+  // Electron module, which the renderer must never hold. Handing back only the
+  // resolved strings keeps the capability behind the bridge.
+  resolveDroppedPaths: (files) =>
+    files.map((file) => webUtils.getPathForFile(file)).filter((path) => path.length > 0),
 }
 
 contextBridge.exposeInMainWorld('claudeview', api)

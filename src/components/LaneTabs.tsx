@@ -18,41 +18,51 @@ export function LaneTabs({ tab, onSelect }: { tab: Tab; onSelect: (laneId: strin
   if (tab.laneOrder.length <= 1) return null
 
   return (
-    <div
-      role="tablist"
-      aria-label="Transcripts"
-      className="flex shrink-0 items-center gap-1 overflow-x-auto px-4 pt-3"
-    >
-      {tab.laneOrder.map((laneId) => {
-        const lane = tab.lanes[laneId]
-        if (!lane) return null
+    <div className="shrink-0">
+      <div
+        role="tablist"
+        aria-label="Transcripts"
+        /*
+         * Centred on the same measure box as the transcript, then inset by the
+         * transcript's gutter *minus* the tab's own 12px padding — so a tab label
+         * lands on the same vertical line as the prose below it, and the active
+         * pill's fill lands on the same line as a tool row's hover fill.
+         * Transcript gutters are 12 / 20 / 32, hence 0 / 8 / 20 here.
+         */
+        className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] items-center gap-1
+                   overflow-x-auto px-0 pt-3 @[30rem]:px-2 @[48rem]:px-5"
+      >
+        {tab.laneOrder.map((laneId) => {
+          const lane = tab.lanes[laneId]
+          if (!lane) return null
 
-        const isMain = laneId === 'main'
-        const isActive = tab.activeLaneId === laneId
-        const Icon = isMain ? MessagesSquare : UserRoundCog
+          const isMain = laneId === 'main'
+          const isActive = tab.activeLaneId === laneId
+          const Icon = isMain ? MessagesSquare : UserRoundCog
 
-        return (
-          <button
-            key={laneId}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onSelect(laneId)}
-            className={cn(
-              'flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs transition-colors duration-150',
-              isActive
-                ? 'bg-raised text-text'
-                : 'text-text-muted hover:bg-surface hover:text-text',
-            )}
-          >
-            <Icon size={13} className={isActive ? 'text-text-muted' : 'text-text-faint'} />
-            <span className="max-w-40 truncate">{isMain ? 'Main' : (lane.type ?? 'Subagent')}</span>
-            {/* A live dot rather than a spinner: reads as "still going" peripherally. */}
-            {!isMain && !lane.closed ? (
-              <CircleDot size={10} className="animate-pulse text-accent" aria-label="Running" />
-            ) : null}
-          </button>
-        )
-      })}
+          return (
+            <button
+              key={laneId}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelect(laneId)}
+              className={cn(
+                'flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs transition-colors duration-150',
+                isActive ? 'bg-raised text-text' : 'text-text-muted hover:bg-surface hover:text-text',
+              )}
+            >
+              <Icon size={13} className={isActive ? 'text-text-muted' : 'text-text-faint'} />
+              <span className="max-w-40 truncate">
+                {isMain ? 'Main' : (lane.type ?? 'Subagent')}
+              </span>
+              {/* A live dot rather than a spinner: reads as "still going" peripherally. */}
+              {!isMain && !lane.closed ? (
+                <CircleDot size={10} className="animate-pulse text-accent" aria-label="Running" />
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

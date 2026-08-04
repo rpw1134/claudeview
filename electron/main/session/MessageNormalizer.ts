@@ -73,7 +73,7 @@ export class MessageNormalizer {
    *  - Text deltas are tagged `historical` so the renderer paints them immediately
    *    rather than typewriting an entire prior conversation.
    */
-  normalizeHistory(messages: SessionMessage[]): StreamEvent[] {
+  normalizeHistory(messages: SessionMessage[], lane?: AgentRef): StreamEvent[] {
     const events: StreamEvent[] = []
 
     for (const message of messages) {
@@ -85,10 +85,15 @@ export class MessageNormalizer {
 
       // Shape a stored message into what the live handlers expect. `uuid` stands in
       // for `message.id`, which stored transcripts don't always carry.
+      //
+      // `lane` overrides the stored `parent_tool_use_id` because a subagent's own
+      // transcript file doesn't record which Task call spawned it — that link lives
+      // only in the sidecar meta, and the caller has already resolved it.
       const shim = {
         message: { id: message.uuid, ...raw },
         uuid: message.uuid,
-        parent_tool_use_id: message.parent_tool_use_id,
+        parent_tool_use_id: lane ? lane.id : message.parent_tool_use_id,
+        subagent_type: lane?.type,
       }
 
       const produced =
@@ -112,6 +117,26 @@ export class MessageNormalizer {
     return events.filter(
       (event) => !(event.kind === 'user-message' && MessageNormalizer.isCommandNoise(event.text)),
     )
+  }
+
+  /**
+   * Open a lane with details the message stream itself can't supply.
+   *
+   * Used when replaying a resumed session: the lane's type and description come
+   * from the subagent's sidecar meta, not from any message. Registering it here
+   * also stops `openLane` emitting a second, detail-free `agent-start` when the
+   * replayed messages arrive.
+   */
+  announceLane(agent: AgentRef, description?: string): StreamEvent[] {
+    if (agent.id === MAIN_AGENT.id || this.openAgents.has(agent.id)) return []
+    this.openAgents.set(agent.id, agent)
+    return [{ kind: 'agent-start', agent, description }]
+  }
+
+  /** Close a lane opened by `announceLane`. */
+  closeLane(agent: AgentRef): StreamEvent[] {
+    if (agent.id === MAIN_AGENT.id || !this.openAgents.delete(agent.id)) return []
+    return [{ kind: 'agent-end', agent }]
   }
 
   private static isCommandNoise(text: string): boolean {

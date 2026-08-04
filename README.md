@@ -25,16 +25,20 @@ for the job.
 - **Real terminals.** `node-pty` + `xterm.js`, so `vim`, colour, and job control all
   work — not a stdout pipe.
 - **Subagent views.** Subagents get their own transcript lanes instead of being
-  interleaved into one unreadable stream.
+  interleaved into one unreadable stream — live *and* on resume.
 - **Resume anything.** Sessions started here *or in the terminal* are listed and
   resumable — they share the same on-disk store. Resuming replays the stored
-  transcript, since the CLI itself replays nothing (main thread only; see
+  transcript, since the CLI itself replays nothing: the main thread plus every
+  subagent lane, each reconnected to the Task row that spawned it (see
   [troubleshooting](docs/troubleshooting.md#a-session-sits-on-starting-and-shows-no-messages)).
+- **Attachments.** Drop files or folders onto a composer, or use the paperclip
+  (`⌥` for folders). Paths are sent as references, not contents — the agent has file
+  tools and a permission model, so it reads what it needs when it needs it.
 - **Adjustable appearance.** Five colorways, four typefaces, and live control over
   text size, line height, and line width. `⌘,` Colorways are generated from one
   shared lightness ramp, so contrast is identical across all five — see
   [design-system.md](docs/design-system.md).
-- **Auto permission mode by default**, changeable per session from the status bar.
+- **Auto permission mode by default**, changeable per session from its composer.
 
 ## Requirements
 
@@ -59,8 +63,9 @@ npm run dev
 | `npm run dev`     | Vite dev server + Electron with hot reload          |
 | `npm run build`   | Typecheck, then build renderer, main, and preload   |
 | `npm run typecheck` | Types only                                        |
-| `npm test`        | Layout-tree invariants (pure, no DOM needed)        |
-| `npm run dist`    | Build and package a distributable via electron-builder |
+| `npm test`        | Pure-logic suites: layout tree, attachments, chip markup |
+| `npm run icon`    | Regenerate the app icon from the theme (`scripts/make-icon.mjs`) |
+| `npm run dist`    | Icon, build, then package a distributable via electron-builder |
 
 ## Keyboard shortcuts
 
@@ -69,9 +74,11 @@ npm run dev
 | `Enter`        | Send message               |
 | `Shift+Enter`  | Newline                    |
 | `Esc`          | Stop the current turn      |
-| `⌘T` / `Ctrl+T`| New session                |
-| `⌘W` / `Ctrl+W`| Close session              |
-| `⌘1`–`⌘9`      | Jump to tab                |
+| `⌘T` / `Ctrl+T`| New session panel          |
+| `⇧⌘T`          | New terminal panel         |
+| `⌘W` / `Ctrl+W`| Close the focused panel    |
+| `⌥Tab` / `Ctrl+Tab` | Cycle panels (`⇧` reverses) |
+| `⌘1`–`⌘9`      | Focus panel by position    |
 | `⌘,`           | Appearance settings        |
 
 ## How it fits together

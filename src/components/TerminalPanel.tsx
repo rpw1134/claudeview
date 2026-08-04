@@ -174,7 +174,9 @@ export function TerminalPanel({
     <div
       ref={hostRef}
       onMouseDown={onFocus}
-      className="h-full w-full overflow-hidden px-2 py-2"
+      // Uniform 12px, matching a session panel's narrow gutter — two panels side by
+      // side otherwise inset their content by different amounts at the same edge.
+      className="h-full w-full overflow-hidden p-3"
       data-selectable
     />
   )
