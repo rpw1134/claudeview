@@ -34,10 +34,13 @@ for the job.
 - **Attachments.** Drop files or folders onto a composer, or use the paperclip
   (`⌥` for folders). Paths are sent as references, not contents — the agent has file
   tools and a permission model, so it reads what it needs when it needs it.
-- **Adjustable appearance.** Five colorways, four typefaces, and live control over
-  text size, line height, and line width. `⌘,` Colorways are generated from one
-  shared lightness ramp, so contrast is identical across all five — see
-  [design-system.md](docs/design-system.md).
+- **Warm by default.** Ships in **Paper** — cream ground, ink-brown text, ochre
+  accent, a faint grain, and a hand-drawn asterisk that animates through thinking,
+  working, and writing. **Hearth** is its dark counterpart; the five cool colorways
+  are still there. Every one is generated from a shared lightness ramp and measured
+  against WCAG AA — see [design-system.md](docs/design-system.md).
+- **Adjustable appearance.** Seven colorways, four typefaces, and live control over
+  text size, line height, and line width. `⌘,`
 - **Auto permission mode by default**, changeable per session from its composer.
 
 ## Requirements

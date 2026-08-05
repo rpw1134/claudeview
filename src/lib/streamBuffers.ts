@@ -80,6 +80,24 @@ class StreamBufferStore {
     this.ensureFrameLoop()
   }
 
+  /**
+   * Mark every block belonging to one tab complete.
+   *
+   * Called when a turn ends. A block only clears its caret on `block-end`, and the
+   * CLI doesn't always send one for a block the model abandoned mid-turn — so a
+   * finished answer could be left with a blinking caret stranded under it,
+   * suggesting output that was never coming. When the turn is over, by definition
+   * nothing is still streaming.
+   */
+  finishAllFor(prefix: string): void {
+    for (const [blockId, buffer] of this.buffers) {
+      if (!buffer.complete && blockId.startsWith(prefix)) {
+        buffer.complete = true
+        this.notify(blockId)
+      }
+    }
+  }
+
   /** Reveal everything immediately — used when a view is hidden or on jump-to-end. */
   revealAll(blockId: string): void {
     const buffer = this.buffers.get(blockId)

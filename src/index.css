@@ -22,9 +22,12 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-code-bg: var(--code-bg);
+  --color-ink: var(--ink);
+  --color-ink-faint: var(--ink-faint);
 
   --font-sans: var(--font-body);
   --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
 
   /*
    * Corner radius, scaled to element size rather than one global value.
@@ -47,34 +50,60 @@
 }
 
 /*
+ * Hand-drawn corners.
+ *
+ * Four *different* radii on one box is the cheapest convincing "drawn by a person"
+ * cue there is — the eye reads the asymmetry long before it can name it, and it
+ * costs one property rather than an SVG border-image per element. Two variants so
+ * adjacent boxes don't repeat the same silhouette, which is what would give the
+ * trick away.
+ */
+@utility hand-1 {
+  border-radius: 14px 11px 15px 10px;
+}
+@utility hand-2 {
+  border-radius: 10px 15px 11px 14px;
+}
+@utility hand-sm-1 {
+  border-radius: 8px 6px 9px 6px;
+}
+@utility hand-sm-2 {
+  border-radius: 6px 9px 6px 8px;
+}
+
+/*
  * Fallbacks so the first paint is themed rather than unstyled. Mirrors the
- * generated `slate` colorway in src/lib/theme.ts.
+ * generated `paper` colorway in src/lib/theme.ts — keep the two in step, or the
+ * window flashes a different palette before the store loads.
  */
 :root {
-  --bg: oklch(0.205 0.007 265);
-  --surface: oklch(0.245 0.007 265);
-  --raised: oklch(0.290 0.008 265);
-  --overlay: oklch(0.320 0.008 265);
-  --line: oklch(0.335 0.008 265);
-  --line-strong: oklch(0.565 0.008 265);
-  --text: oklch(0.910 0.004 265);
-  --text-muted: oklch(0.720 0.008 265);
-  --text-faint: oklch(0.585 0.010 265);
-  --accent: oklch(0.700 0.115 250);
-  --accent-contrast: oklch(0.190 0.007 250);
-  --accent-wash: color-mix(in oklch, oklch(0.7 0.115 250) 16%, transparent);
-  --success: oklch(0.720 0.130 155);
-  --danger: oklch(0.720 0.160 25);
-  --warning: oklch(0.720 0.120 85);
-  --code-bg: oklch(0.185 0.007 265);
+  --bg: oklch(0.955 0.016 75);
+  --surface: oklch(0.925 0.016 75);
+  --raised: oklch(0.895 0.018 75);
+  --overlay: oklch(0.985 0.018 75);
+  --line: oklch(0.855 0.019 75);
+  --line-strong: oklch(0.580 0.019 75);
+  --text: oklch(0.305 0.010 75);
+  --text-muted: oklch(0.475 0.019 75);
+  --text-faint: oklch(0.494 0.022 75);
+  --accent: oklch(0.520 0.115 55);
+  --accent-contrast: oklch(0.990 0.016 55);
+  --accent-wash: color-mix(in oklch, oklch(0.52 0.115 55) 16%, transparent);
+  --success: oklch(0.500 0.130 140);
+  --danger: oklch(0.500 0.160 28);
+  --warning: oklch(0.500 0.120 70);
+  --code-bg: oklch(0.860 0.021 75);
+  --ink: oklch(0.435 0.026 75);
+  --ink-faint: oklch(0.520 0.029 75);
 
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --font-display: 'Bradley Hand', 'Noteworthy', 'Marker Felt', 'Segoe Print', var(--font-body);
   --font-size-base: 15px;
-  --line-height-body: 1.6;
-  --measure: 72ch;
+  --line-height-body: 1.65;
+  --measure: 84ch;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -93,6 +122,44 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
+}
+
+/*
+ * Paper grain.
+ *
+ * Fractal noise at very low opacity, as a fixed overlay so it doesn't scroll with
+ * the content — paper stays still while the writing moves over it. Inline SVG in a
+ * data URI: the CSP allows `img-src data:` and blocks every external host, so this
+ * is the only way to have a texture at all without shipping a bitmap.
+ *
+ * The layer is `pointer-events: none` and sits under nothing — it's the last thing
+ * in the stacking order at z-index 0, so every panel draws over it.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.32'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+/* On dark colorways the grain has to *lighten*, or it just muddies the surface. */
+:root[data-scheme='dark'] body::before {
+  mix-blend-mode: screen;
+  opacity: 0.22;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 
 /* App chrome isn't selectable; content and inputs are. */
@@ -169,10 +236,29 @@ textarea,
  * Scoped under `.prose-stream` so model-authored HTML can never restyle app
  * chrome. Vertical rhythm is on a 4px grid to match the spacing scale.
  */
+/*
+ * The measure applies to running text, not to the container.
+ *
+ * Capping the whole block made code samples and tables wrap inside a column narrower
+ * than the panel they sat in — punishing them for a rule that exists only for prose.
+ * Now paragraphs, lists and headings cap at `--measure` while `pre` and `table` use
+ * the width available. This is also what lets the transcript be full-width and
+ * left-aligned without lines running to 160 characters.
+ */
 .prose-stream {
-  max-width: var(--measure);
+  max-width: none;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+.prose-stream p,
+.prose-stream ul,
+.prose-stream ol,
+.prose-stream blockquote,
+.prose-stream h1,
+.prose-stream h2,
+.prose-stream h3,
+.prose-stream h4 {
+  max-width: var(--measure);
 }
 .prose-stream > *:first-child {
   margin-top: 0;
@@ -252,9 +338,11 @@ textarea,
 }
 .prose-stream pre {
   background: var(--code-bg);
-  border-radius: var(--radius-lg);
+  /* Uneven corners, like everything else that's a drawn object rather than chrome. */
+  border-radius: 12px 9px 13px 8px;
   padding: 12px 16px;
   overflow-x: auto;
+  max-width: 100%;
 }
 .prose-stream pre code {
   background: none;
@@ -356,6 +444,77 @@ textarea,
   to {
     transform: rotate(360deg);
   }
+}
+
+/*
+ * The mark (see Mark.tsx).
+ *
+ * Every state animates `transform` and `opacity` only. The arms are separate paths
+ * so `writing` can ripple around the mark rather than pulsing it as one shape —
+ * which is the difference between a logo that has states and a logo with a spinner
+ * bolted on.
+ */
+.mark {
+  overflow: visible;
+}
+.mark-body,
+.mark-arm {
+  transform-origin: 12px 12px;
+}
+
+.mark-idle .mark-arm {
+  opacity: 0.85;
+}
+
+/* Thinking: the whole mark breathes while the arms drift the other way — a small
+   counter-motion reads as considering rather than as a loading spinner. */
+.mark-thinking .mark-body {
+  animation: mark-breathe 2.1s ease-in-out infinite;
+}
+@keyframes mark-breathe {
+  0%,
+  100% {
+    transform: scale(0.9) rotate(-3deg);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.04) rotate(3deg);
+    opacity: 1;
+  }
+}
+
+/* Working: a real rotation. Legible only because the arms are uneven. */
+.mark-working .mark-body {
+  animation: mark-turn 2.4s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+@keyframes mark-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Writing: arms fire outward in sequence (delays are set per-arm in the component),
+   so the mark looks like it's putting something down. */
+.mark-writing .mark-arm {
+  animation: mark-stroke 1.15s ease-in-out infinite;
+}
+@keyframes mark-stroke {
+  0%,
+  70%,
+  100% {
+    transform: scale(0.88);
+    opacity: 0.5;
+  }
+  25% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* Failed: settles crooked and stays there. Stillness is the signal. */
+.mark-failed .mark-body {
+  transform: rotate(-8deg) scale(0.94);
+  opacity: 0.8;
 }
 
 /* Syntax highlighting mapped onto the active colorway. */

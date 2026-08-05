@@ -37,7 +37,31 @@ export const useAppearanceStore = create<AppearanceState>()(
     }),
     {
       name: 'claudeview.appearance',
-      version: 1,
+      version: 2,
+      /**
+       * v1 -> v2: move anyone still on the *old defaults* onto the new ones.
+       *
+       * A persisted setting normally beats a changed default — that's the point of
+       * persisting it. But values that exactly match the previous defaults were
+       * never chosen, they were just never touched, and treating them as choices
+       * means a redesign is invisible to every existing install: you'd relaunch
+       * into the old theme and reasonably conclude nothing had changed.
+       *
+       * Anything the user actually picked differs from the old default and is left
+       * alone.
+       */
+      migrate: (persisted, from) => {
+        const state = persisted as Partial<Appearance>
+        if (from >= 2) return state
+
+        const OLD_DEFAULTS = { colorway: 'slate', lineHeight: 1.6, measure: 72 } as const
+        if (state.colorway === OLD_DEFAULTS.colorway) state.colorway = DEFAULT_APPEARANCE.colorway
+        if (state.lineHeight === OLD_DEFAULTS.lineHeight) {
+          state.lineHeight = DEFAULT_APPEARANCE.lineHeight
+        }
+        if (state.measure === OLD_DEFAULTS.measure) state.measure = DEFAULT_APPEARANCE.measure
+        return state
+      },
       partialize: (state) => ({
         colorway: state.colorway,
         font: state.font,

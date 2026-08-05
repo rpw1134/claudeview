@@ -160,16 +160,12 @@ export function PanelComposer({
   return (
     <div className="shrink-0">
       {/*
-        Same box as the transcript: capped at the reading measure, centred, with the
-        gutter applied *inside* the cap. The nesting order matters — padding outside
-        the cap offsets the composer from the prose by exactly the gutter width
-        (measured: prose at x=268, shell at x=236), which reads as a misalignment
-        rather than as an inset.
+        Full width, matching the transcript's gutters exactly — no centring and no
+        measure cap. The transcript is a left-aligned rail now, so a composer
+        centred on a narrower box would sit visibly off-axis from the conversation
+        it belongs to.
       */}
-      <div
-        className="mx-auto w-full max-w-[calc(var(--measure)+8rem)]
-                   px-3 pb-3 @[30rem]:px-5 @[48rem]:px-8 @[48rem]:pb-4"
-      >
+      <div className="w-full px-3 pb-3 @[30rem]:px-5 @[48rem]:px-7 @[48rem]:pb-4">
         <div
           data-focus-host
           onDragEnter={(event) => {
@@ -184,11 +180,11 @@ export function PanelComposer({
           }}
           onDrop={onDrop}
           className={cn(
-            'rounded-md transition-colors duration-150',
+            'hand-2 transition-colors duration-150',
             // No border at rest. The panel's header icon already says which one is
             // live; a second outline per panel is what made eight of these loud.
-            panelFocused ? 'bg-raised' : 'bg-raised/50',
-            'focus-within:bg-raised focus-within:ring-1 focus-within:ring-accent/50',
+            panelFocused ? 'bg-raised' : 'bg-raised/60',
+            'focus-within:bg-raised focus-within:ring-1 focus-within:ring-accent/40',
             dropActive && 'ring-1 ring-accent',
             disabled && 'opacity-50',
           )}
@@ -214,7 +210,7 @@ export function PanelComposer({
               onChange={(event) => onPermissionModeChange(event.target.value as PermissionMode)}
               disabled={disabled}
               className={cn(
-                'h-6 shrink-0 rounded-sm border-none bg-transparent pl-1 pr-0 text-xs outline-none',
+                'h-6 shrink-0 hand-sm-1 border-none bg-transparent pl-1 pr-0 text-xs outline-none',
                 permissionMode === 'bypassPermissions' || permissionMode === 'dontAsk'
                   ? 'text-warning'
                   : 'text-text-faint hover:text-text-muted',
@@ -235,7 +231,7 @@ export function PanelComposer({
               disabled={disabled}
               aria-label="Attach files"
               title="Attach files (⌥ for folders, or drop them here)"
-              className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+              className="hand-sm-1 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
                          text-text-faint transition-colors hover:bg-overlay hover:text-text-muted"
             >
               <Paperclip size={13} />
@@ -249,7 +245,7 @@ export function PanelComposer({
               disabled={disabled}
               rows={1}
               placeholder={
-                disabled ? 'Session ended' : isBusy ? 'Queue a follow-up…' : 'Message…'
+                disabled ? 'Session ended' : isBusy ? 'Add to the pile…' : 'Write something…'
               }
               aria-label="Message"
               style={{ minHeight: MIN_HEIGHT_PX }}
@@ -264,7 +260,7 @@ export function PanelComposer({
                 onClick={onInterrupt}
                 aria-label="Stop generating"
                 title="Stop (Esc)"
-                className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+                className="hand-sm-2 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
                            text-text-muted transition-colors hover:bg-overlay hover:text-text"
               >
                 <Square size={10} className="fill-current" />
@@ -274,7 +270,7 @@ export function PanelComposer({
                 onClick={submit}
                 aria-label="Send message"
                 title="Send (Enter)"
-                className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm
+                className="hand-sm-2 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
                            bg-accent text-accent-contrast transition-opacity hover:opacity-90"
               >
                 <ArrowUp size={12} />
@@ -311,7 +307,7 @@ export function AttachmentChips({
           <li key={path}>
             <span
               title={path}
-              className="flex h-6 items-center gap-1.5 rounded-sm bg-overlay pl-1.5 pr-1
+              className="hand-sm-1 flex h-6 items-center gap-1.5 bg-overlay pl-1.5 pr-1
                          text-xs text-text-muted"
             >
               <Icon size={11} className="shrink-0 text-text-faint" aria-hidden />

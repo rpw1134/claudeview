@@ -59,11 +59,11 @@ export const ToolCallCard = memo(function ToolCallCard({
   return (
     <div
       className={cn(
-        '-mx-3 my-1 overflow-hidden rounded-lg transition-colors duration-150',
+        'hand-sm-2 my-0.5 overflow-hidden transition-colors duration-150',
         expanded ? 'bg-surface' : 'hover:bg-surface',
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-2 py-1.5">
         <button
           onClick={() => setExpanded((value) => !value)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -93,7 +93,7 @@ export const ToolCallCard = memo(function ToolCallCard({
       </div>
 
       {expanded ? (
-        <div className="border-t border-line px-3 py-3" data-selectable>
+        <div className="border-t border-line px-2 py-3" data-selectable>
           <Section label="Input">
             <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-text-muted">
               {formatValue(item.input)}

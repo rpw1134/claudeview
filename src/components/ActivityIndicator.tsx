@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SessionStatus } from '@shared/ipc'
+import { Mark, type MarkState } from './Mark'
 import { cn } from '@/lib/utils'
 
 /**
@@ -24,11 +25,15 @@ import { cn } from '@/lib/utils'
  * globally in index.css), where the elapsed counter carries the liveness instead.
  */
 
+/**
+ * Lowercase, and verbs rather than nouns. "Thinking" with a capital reads as a
+ * status field's value; "thinking…" reads as something happening.
+ */
 const LABELS: Partial<Record<SessionStatus, string>> = {
-  starting: 'Starting',
-  thinking: 'Thinking',
-  streaming: 'Writing',
-  tool: 'Working',
+  starting: 'waking up',
+  thinking: 'thinking',
+  streaming: 'writing',
+  tool: 'working',
 }
 
 /**
@@ -65,41 +70,26 @@ export function ActivityIndicator({
       {...(compact
         ? { 'aria-hidden': true }
         : { role: 'status', 'aria-label': `${label}, ${elapsed} seconds elapsed` })}
-      className={cn('flex items-center gap-1.5 text-xs text-accent', className)}
+      className={cn('flex items-center gap-2 text-sm text-accent', className)}
     >
-      <Glyph status={status} />
+      {/* The mark itself, in the state it's in. One drawn thing that changes
+          behaviour, rather than a different spinner per phase. */}
+      {compact ? <Mark state={markStateFor(status)} size={15} /> : null}
       {compact ? null : (
         <>
-          <span>{label}</span>
+          <span className="font-display">{label}…</span>
           {/* Tabular figures so the width doesn't twitch as the count ticks. */}
-          <span className="text-text-faint tabular-nums">{elapsed}s</span>
+          <span className="text-xs text-text-faint tabular-nums">{elapsed}s</span>
         </>
       )}
     </span>
   )
 }
 
-function Glyph({ status }: { status: SessionStatus }) {
-  if (status === 'streaming') {
-    return (
-      <span className="flex h-3 w-4 items-center justify-between" aria-hidden>
-        {[0, 1, 2].map((index) => (
-          <span
-            key={index}
-            className="activity-wave h-1 w-1 rounded-full bg-current"
-            style={{ animationDelay: `${index * 140}ms` }}
-          />
-        ))}
-      </span>
-    )
-  }
-
-  if (status === 'tool') {
-    return <span className="activity-spin h-3 w-3 rounded-full" aria-hidden />
-  }
-
-  // thinking / starting
-  return <span className="activity-breathe h-2 w-2 rounded-full bg-current" aria-hidden />
+function markStateFor(status: SessionStatus): MarkState {
+  if (status === 'streaming') return 'writing'
+  if (status === 'tool') return 'working'
+  return 'thinking'
 }
 
 /**

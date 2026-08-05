@@ -31,7 +31,7 @@ export function WorkspaceBar({
   return (
     <div
       data-drag-region
-      className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3"
+      className="flex h-12 shrink-0 items-center gap-2 bg-surface/70 px-3"
       style={{ paddingLeft: isMac ? 84 : 12 }}
     >
       <Button variant="subtle" size="md" onClick={() => onAddSession('row')} disabled={atCapacity}>
@@ -47,7 +47,7 @@ export function WorkspaceBar({
 
       {/* Which way the next panel splits the focused one. Dragging can rearrange
           afterwards; this just avoids an obvious extra drag for the common case. */}
-      <span className="text-xs text-text-faint">Split</span>
+      <span className="font-display text-sm text-text-faint">split</span>
       <Button
         variant="ghost"
         size="icon"
@@ -81,7 +81,7 @@ export function WorkspaceBar({
       </Button>
 
       <div className="ml-auto flex items-center gap-2">
-        <span className="text-xs text-text-faint">
+        <span className="font-display text-sm text-text-faint">
           {panelCount}/{MAX_PANELS}
         </span>
         <Button

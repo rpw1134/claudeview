@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
-import {
-  ChevronRight,
-  FolderOpen,
-  Loader2,
-  MessagesSquare,
-  Search,
-  SquareTerminal,
-} from 'lucide-react'
+import { ChevronRight, FolderOpen, Loader2, Search, SquareTerminal } from 'lucide-react'
 import type { SessionSummary } from '@shared/ipc'
 import { api } from '@/lib/api'
+import { Mark, Wordmark } from './Mark'
+import { SketchRule } from './Sketch'
 import { Button } from './ui/Button'
 import { Select } from './ui/Field'
 import { cn, shortenPath, timeAgo } from '@/lib/utils'
@@ -16,17 +11,13 @@ import { cn, shortenPath, timeAgo } from '@/lib/utils'
 /**
  * Landing screen: pick a directory, then start something in it.
  *
- * ## What it has to make obvious
+ * ## Why it isn't a centred card any more
  *
- * Two things, and the earlier version made neither of them clear. First, that
- * **the working directory applies to everything below it** — it was presented as a
- * form field belonging to the "new session" card, so it read as one of that card's
- * settings rather than as the context for the resume list too. It's now a single
- * control at the top with the actions grouped under it.
- *
- * Second, that **this app is panels**. The old copy described a message bar at the
- * bottom of the window, which no longer exists. A first-time screen that describes
- * the wrong UI is worse than one that describes nothing.
+ * It used to be a `max-w-xl` column centred in the window: a narrow strip of content
+ * with a wide empty margin on both sides, which is what a settings dialog looks like,
+ * not what a workspace looks like. Now the page is left-aligned against a generous
+ * margin and the resume list runs in two columns when there's room — so the width of
+ * the window buys you something.
  *
  * ## One focal point
  *
@@ -36,10 +27,9 @@ import { cn, shortenPath, timeAgo } from '@/lib/utils'
  *
  * ## No boxes inside boxes
  *
- * There are no cards at all now. Grouping is spacing and a section heading
- * (Gestalt proximity), and rows gain a fill only on hover. The previous version
- * nested a bordered field inside a bordered card; removing the outer box lost
- * nothing but lines.
+ * No cards at all. Grouping is spacing, a heading, and a drawn rule (Gestalt
+ * proximity); rows gain a fill only on hover. The previous version nested a bordered
+ * field inside a bordered card, and removing the outer box lost nothing but lines.
  */
 export function NewSessionPanel({
   home,
@@ -89,81 +79,74 @@ export function NewSessionPanel({
     : sessions
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 py-16">
-      <div className="w-full max-w-xl">
-        <h1 className="text-2xl font-semibold tracking-tight text-text">ClaudeView</h1>
-        <p className="mt-2 text-sm leading-relaxed text-text-muted">
-          Sessions and terminals side by side, up to eight panels. Drag a panel by its
-          header to rearrange, drag a divider to resize.
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-5xl px-8 py-12 lg:px-14 lg:py-16">
+        <Wordmark />
+        <p className="mt-4 max-w-[52ch] font-display text-lg leading-relaxed text-text-muted">
+          Sessions and terminals, side by side. Drag a panel by its header to move it,
+          drag a divider to resize.
         </p>
 
         {/*
-          The directory control comes first because it scopes everything under it.
-          One button rather than a read-only field plus a "Choose" button: the value
-          and the way to change it are the same target, which is both fewer elements
-          and a larger hit area.
+          The directory comes first because it scopes everything under it — the new
+          session, the terminal, and the resume list. One button rather than a
+          read-only field plus a "Choose": the value and the way to change it are the
+          same target, which is fewer elements and a much larger hit area.
         */}
-        <div className="mt-10">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">
-            Working directory
-          </h2>
-          <button
-            onClick={pickDirectory}
-            className="group mt-2 flex h-11 w-full items-center gap-3 rounded-lg bg-surface px-3
-                       text-left transition-colors hover:bg-raised"
-          >
-            <FolderOpen size={16} className="shrink-0 text-text-faint" aria-hidden />
-            <span
-              className={cn(
-                'min-w-0 flex-1 truncate font-mono text-sm',
-                cwd ? 'text-text' : 'text-text-faint',
-              )}
-              title={cwd}
+        <div className="mt-12 flex flex-wrap items-end gap-3">
+          <div className="min-w-0 flex-1 basis-80">
+            <h2 className="font-display text-sm text-text-faint">working in</h2>
+            <button
+              onClick={pickDirectory}
+              className="hand-1 group mt-1.5 flex h-12 w-full items-center gap-3 bg-surface px-3.5
+                         text-left transition-colors hover:bg-raised"
             >
-              {cwd ? shortenPath(cwd, home) : 'Default — the app’s own directory'}
-            </span>
-            <span className="shrink-0 text-xs text-text-faint group-hover:text-text-muted">
-              Change
-            </span>
-          </button>
-          <p className="mt-2 text-xs leading-relaxed text-text-faint">
-            Claude reads and writes files relative to this directory, and it scopes the
-            resume list below.
-          </p>
+              <FolderOpen size={17} className="shrink-0 text-ink-faint" aria-hidden />
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate font-mono text-sm',
+                  cwd ? 'text-text' : 'text-text-faint',
+                )}
+                title={cwd}
+              >
+                {cwd ? shortenPath(cwd, home) : 'the app’s own directory'}
+              </span>
+              <span className="shrink-0 font-display text-sm text-text-faint group-hover:text-accent">
+                change
+              </span>
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="primary" size="lg" onClick={() => onStart({ cwd })} className="h-12 px-5">
+              <Mark state="idle" size={17} />
+              New session
+            </Button>
+            {/* Secondary, not primary: a terminal is the supporting act here. */}
+            <Button variant="outline" size="lg" onClick={() => onStartTerminal(cwd)} className="h-12">
+              <SquareTerminal size={16} />
+              Terminal
+            </Button>
+          </div>
         </div>
 
-        <div className="mt-6 flex gap-2">
-          <Button variant="primary" size="lg" onClick={() => onStart({ cwd })} className="flex-1">
-            <MessagesSquare size={15} />
-            New session
-          </Button>
-          {/* Secondary, not primary: a terminal is the supporting act here. */}
-          <Button variant="outline" size="lg" onClick={() => onStartTerminal(cwd)}>
-            <SquareTerminal size={15} />
-            Terminal
-          </Button>
-        </div>
-
-        <p className="mt-3 text-xs text-text-faint">
-          <Shortcut keys="⌘T" /> new session · <Shortcut keys="⇧⌘T" /> new terminal ·{' '}
-          <Shortcut keys="⌥Tab" /> switch panels
+        <p className="mt-3 font-display text-sm text-text-faint">
+          ⌘T new session · ⇧⌘T new terminal · ⌥Tab switch panels
         </p>
 
-        <section className="mt-12">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">
-              Resume
-            </h2>
+        <section className="mt-14">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h2 className="font-display text-xl text-text">pick up where you left off</h2>
             <div className="flex items-center gap-2">
               {/* Appears only once there's enough history for finding to be a
                   problem. A search box over four rows is furniture. */}
               {sessions.length > 8 ? (
-                <div className="flex h-8 w-44 items-center gap-2 rounded-md bg-surface px-2">
+                <div className="hand-sm-1 flex h-8 w-44 items-center gap-2 bg-surface px-2">
                   <Search size={13} className="shrink-0 text-text-faint" aria-hidden />
                   <input
                     value={filter}
                     onChange={(event) => setFilter(event.target.value)}
-                    placeholder="Filter"
+                    placeholder="filter"
                     aria-label="Filter sessions"
                     className="min-w-0 flex-1 border-none bg-transparent text-xs text-text
                                outline-none placeholder:text-text-faint"
@@ -183,19 +166,23 @@ export function NewSessionPanel({
             </div>
           </div>
 
+          <SketchRule className="mb-2 text-ink-faint" />
+
           {loading ? (
-            <p className="flex items-center gap-2 px-3 py-8 text-sm text-text-faint">
+            <p className="flex items-center gap-2 px-2 py-8 text-sm text-text-faint">
               <Loader2 size={14} className="animate-spin" />
-              Looking for sessions…
+              looking…
             </p>
           ) : visible.length === 0 ? (
-            <p className="px-3 py-8 text-sm leading-relaxed text-text-faint">
+            <p className="max-w-[56ch] px-2 py-8 text-sm leading-relaxed text-text-faint">
               {sessions.length === 0
-                ? 'No previous sessions found. Sessions started in the terminal show up here too.'
+                ? 'Nothing yet. Sessions you start in the terminal show up here too — they share the same store.'
                 : 'Nothing matches that filter.'}
             </p>
           ) : (
-            <ul className="-mx-3">
+            /* Two columns when the window can hold them, which is what turns the
+               extra width into more history rather than more margin. */
+            <ul className="grid grid-cols-1 gap-x-6 lg:grid-cols-2">
               {visible.map((session) => (
                 <li key={session.sessionId}>
                   <button
@@ -206,14 +193,14 @@ export function NewSessionPanel({
                         title: session.title ?? 'Resumed session',
                       })
                     }
-                    className="group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left
+                    className="hand-sm-1 group flex w-full items-center gap-3 px-2.5 py-2.5 text-left
                                transition-colors hover:bg-surface"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-text">
                         {session.title ?? session.sessionId.slice(0, 8)}
                       </span>
-                      <span className="mt-1 flex items-center gap-2 text-xs text-text-faint">
+                      <span className="mt-0.5 flex items-center gap-2 text-xs text-text-faint">
                         {session.cwd ? (
                           <span className="truncate font-mono">
                             {shortenPath(session.cwd, home)}
@@ -237,8 +224,4 @@ export function NewSessionPanel({
       </div>
     </div>
   )
-}
-
-function Shortcut({ keys }: { keys: string }) {
-  return <kbd className="font-mono text-text-muted">{keys}</kbd>
 }

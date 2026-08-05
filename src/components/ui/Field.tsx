@@ -26,7 +26,7 @@ export function Field({
 }) {
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-text-muted">
+      <label htmlFor={htmlFor} className="font-display text-sm text-text-muted">
         {label}
       </label>
       {children}
@@ -97,7 +97,7 @@ export function Select({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        'h-9 w-full rounded-md border border-line-strong bg-raised px-3 text-sm text-text',
+        'h-9 w-full hand-sm-2 border border-line-strong bg-raised px-3 text-sm text-text',
         'transition-colors hover:border-accent',
         className,
       )}

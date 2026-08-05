@@ -47,7 +47,7 @@ export function LaneTabs({ tab, onSelect }: { tab: Tab; onSelect: (laneId: strin
               aria-selected={isActive}
               onClick={() => onSelect(laneId)}
               className={cn(
-                'flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs transition-colors duration-150',
+                'flex h-8 shrink-0 items-center gap-2 hand-sm-1 px-3 text-xs transition-colors duration-150',
                 isActive ? 'bg-raised text-text' : 'text-text-muted hover:bg-surface hover:text-text',
               )}
             >

@@ -70,7 +70,7 @@ export const PanelFrame = memo(function PanelFrame({
       // `@container` so the header and the composer can adapt to the panel's own
       // width rather than the window's — a half-width panel and a one-eighth panel
       // need different treatments at the same viewport size.
-      className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface"
+      className="@container hand-1 flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-surface"
     >
       <header
         onPointerDown={onHeaderPointerDown}
@@ -124,7 +124,7 @@ export const PanelFrame = memo(function PanelFrame({
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-b-lg bg-bg">
+      <div className="min-h-0 flex-1 overflow-hidden bg-bg">
         {panel.kind === 'terminal' ? (
           <TerminalPanel
             terminalId={panel.refId}

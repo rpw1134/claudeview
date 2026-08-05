@@ -264,6 +264,10 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         break
 
       case 'result':
+        // The turn is over, so nothing is still streaming. Without this a block the
+        // model abandoned mid-turn keeps its caret blinking under a finished
+        // answer, promising output that isn't coming.
+        streamBuffers.finishAllFor(`${tab.id}::`)
         // Accumulate across turns so the status bar shows the session total, not
         // just the last turn.
         usage = {
