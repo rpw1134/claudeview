@@ -1,7 +1,10 @@
 import { memo, useState } from 'react'
 import { ArrowDown, Brain, ChevronRight } from 'lucide-react'
+import type { SessionStatus } from '@shared/ipc'
 import type { Lane, TranscriptItem } from '@/types/session'
 import { useStickyScroll } from '@/hooks/useStickyScroll'
+import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
+import { ErrorRow } from './ErrorRow'
 import { StreamingMarkdown } from './StreamingMarkdown'
 import { ToolCallCard } from './ToolCallCard'
 import { Button } from './ui/Button'
@@ -26,7 +29,20 @@ import { cn } from '@/lib/utils'
  * Spacing does the grouping (Gestalt proximity) rather than boxes: turns are
  * separated by 24px, items within a turn by 4–8px.
  */
-export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: string) => void }) {
+export function Transcript({
+  lane,
+  status,
+  showActivity,
+  onOpenLane,
+  onRetry,
+}: {
+  lane: Lane
+  status: SessionStatus
+  /** Only the lane that owns the turn shows it — not every subagent tab at once. */
+  showActivity: boolean
+  onOpenLane: (id: string) => void
+  onRetry: (itemId: string, text: string) => void
+}) {
   const { ref, isPinned, scrollToBottom } = useStickyScroll()
 
   return (
@@ -45,10 +61,28 @@ export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: 
           className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] flex-col
                      px-3 py-4 @[30rem]:px-5 @[30rem]:py-6 @[48rem]:px-8 @[48rem]:py-8"
         >
-          {lane.items.length === 0 ? <EmptyLane /> : null}
+          {lane.items.length === 0 && !showActivity ? <EmptyLane /> : null}
           {lane.items.map((item) => (
-            <TranscriptRow key={item.id} item={item} onOpenLane={onOpenLane} />
+            <TranscriptRow
+              key={item.id}
+              item={item}
+              onOpenLane={onOpenLane}
+              onRetry={onRetry}
+            />
           ))}
+
+          {/*
+            Activity belongs at the tail of the conversation, not only in the panel
+            header. After pressing Enter the eye is at the bottom of the transcript,
+            and a header indicator means the one place you're looking is the one
+            place nothing happens. Sticky scroll keeps this in view as it grows.
+          */}
+          {showActivity && isBusyStatus(status) ? (
+            <div className="py-2">
+              <ActivityIndicator status={status} />
+            </div>
+          ) : null}
+
           {/* Room so the last line never sits against the composer. */}
           <div className="h-6" aria-hidden />
         </div>
@@ -72,9 +106,11 @@ export function Transcript({ lane, onOpenLane }: { lane: Lane; onOpenLane: (id: 
 const TranscriptRow = memo(function TranscriptRow({
   item,
   onOpenLane,
+  onRetry,
 }: {
   item: TranscriptItem
   onOpenLane: (id: string) => void
+  onRetry: (itemId: string, text: string) => void
 }) {
   switch (item.kind) {
     case 'user':
@@ -89,8 +125,11 @@ const TranscriptRow = memo(function TranscriptRow({
       return <ThinkingBlock blockId={item.blockId} />
     case 'tool':
       return <ToolCallCard item={item} onOpenLane={onOpenLane} />
+    case 'error':
+      return <ErrorRow item={item} onRetry={onRetry} />
   }
 })
+
 
 /**
  * A user turn. Distinguished by fill and alignment, not by a border — the fill

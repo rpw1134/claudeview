@@ -72,6 +72,13 @@ export class SessionRunner {
   private loop: Promise<void> | null = null
   private disposed = false
   private sessionId: string | null = null
+  /**
+   * True once any turn has been queued. `attach()` checks it before declaring the
+   * session idle: hydrating a resumed session takes long enough that a user can
+   * send during it, and an unconditional `'idle'` at the end of attach would then
+   * wipe the `'thinking'` that send had already set.
+   */
+  private turnStarted = false
 
   constructor(request: CreateSessionRequest, deps: SessionRunnerDeps) {
     this.tabId = request.tabId
@@ -89,7 +96,7 @@ export class SessionRunner {
     try {
       this.handle = query({ prompt: this.queue, options: this.buildOptions() })
     } catch (error) {
-      this.push({ kind: 'error', message: describeError(error) })
+      this.push({ kind: 'error', message: describeError(error), fatal: true })
       this.push({ kind: 'status', status: 'error' })
       return
     }
@@ -133,9 +140,11 @@ export class SessionRunner {
       this.push({ kind: 'session-attached', cwd: this.request.cwd })
     }
 
-    // If an initial prompt was queued, a turn is already underway — leave the
-    // status alone rather than overwriting "thinking" with "idle".
-    if (!this.disposed && !this.request.initialPrompt) {
+    // Only declare the session idle if nothing is running. A turn may already have
+    // started — from `initialPrompt`, or from the user typing during a resume's
+    // hydration, which is slow enough to be a real race — and an unconditional
+    // 'idle' here would overwrite its 'thinking'.
+    if (!this.disposed && !this.turnStarted) {
       this.push({ kind: 'status', status: 'idle' })
     }
   }
@@ -282,7 +291,7 @@ export class SessionRunner {
     } catch (error) {
       // An abort is how we intentionally stop; it isn't a failure worth surfacing.
       if (!this.abort.signal.aborted && !this.disposed) {
-        this.push({ kind: 'error', message: describeError(error) })
+        this.push({ kind: 'error', message: describeError(error), fatal: true })
         this.push({ kind: 'status', status: 'error' })
       }
     } finally {
@@ -297,12 +306,20 @@ export class SessionRunner {
     this.queue.close()
   }
 
-  /** Queue a user turn. Safe to call while the model is mid-response. */
-  send(text: string): void {
-    if (this.disposed || this.queue.isClosed) return
+  /**
+   * Queue a user turn. Safe to call while the model is mid-response.
+   *
+   * Returns false when the session can no longer accept input, so the caller can
+   * tell the difference between "sent" and "silently dropped". This used to return
+   * void, which meant a send to a dead session looked identical to a successful
+   * one until the user noticed nothing was happening.
+   */
+  send(text: string, turnId?: string): boolean {
+    if (this.disposed || this.queue.isClosed) return false
 
+    this.turnStarted = true
     this.batcher.add([
-      { kind: 'user-message', text, agent: { id: 'main' } },
+      { kind: 'user-message', text, agent: { id: 'main' }, turnId },
       { kind: 'status', status: 'thinking' },
     ])
 
@@ -314,6 +331,8 @@ export class SessionRunner {
       // type but ignored on this path.
       session_id: this.sessionId ?? '',
     } as SDKUserMessage)
+
+    return true
   }
 
   /** Stop the current turn but keep the session alive for the next message. */

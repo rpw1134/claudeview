@@ -29,14 +29,33 @@ export type PermissionMode =
   | 'dontAsk'
   | 'auto'
 
-/** Lifecycle of a single session, as the UI understands it. */
+/**
+ * What a session is doing, as the UI understands it.
+ *
+ * These are **turn** states, not session-lifecycle states, and the distinction is
+ * load-bearing. There used to be a `'ready'` here, emitted from `system/init` to
+ * mean "the CLI is up". Because init lands immediately after the first user
+ * message — the CLI is silent until then — `'ready'` overwrote the `'thinking'`
+ * that `send()` had just set, in the *same* 16ms batch. React therefore never
+ * rendered `'thinking'` at all, and the UI sat visibly dead from the moment you
+ * pressed Enter until the model's first token: measured at 1173ms on a first
+ * message, and indefinitely on turns that were slower to start.
+ *
+ * The fix isn't ordering, it's that session lifecycle and turn activity are
+ * different axes and must not share one field. `system/init` now reports identity
+ * only, and this union describes the turn.
+ */
 export type SessionStatus =
+  /** Subprocess coming up; no session yet. */
   | 'starting'
-  | 'ready'
-  | 'thinking'
-  | 'streaming'
-  | 'tool'
+  /** Attached, nothing in flight. */
   | 'idle'
+  /** A turn is underway but the model hasn't produced anything renderable yet. */
+  | 'thinking'
+  /** Producing visible text. */
+  | 'streaming'
+  /** Running a tool. */
+  | 'tool'
   | 'error'
   | 'closed'
 
@@ -142,8 +161,18 @@ export type StreamEvent =
   | { kind: 'agent-start'; agent: AgentRef; description?: string }
   | { kind: 'agent-end'; agent: AgentRef }
 
-  /** Echo of a user turn, so the transcript owns the full conversation. */
-  | { kind: 'user-message'; text: string; agent: AgentRef }
+  /**
+   * Echo of a user turn, so the transcript owns the full conversation.
+   *
+   * `turnId` is present when the renderer originated the turn, and is the id it
+   * already used for its own optimistic echo. The reducer drops any echo whose
+   * `turnId` it has seen, so the message appears at 0ms instead of after an IPC
+   * round trip (measured at ~150ms) without ever rendering twice.
+   *
+   * Echoes still arrive without a `turnId` for turns the renderer didn't start —
+   * an `initialPrompt`, or a replayed transcript — and those are kept.
+   */
+  | { kind: 'user-message'; text: string; agent: AgentRef; turnId?: string }
 
   /** Turn finished. Carries the usage summary for the status bar. */
   | {
@@ -164,7 +193,13 @@ export type StreamEvent =
         cacheCreationTokens: number
       }
     }
-  | { kind: 'error'; message: string }
+  /**
+   * Something went wrong. `fatal` distinguishes the two cases the UI must handle
+   * differently: a turn that failed but left the session usable (retry the
+   * message) from a session that is gone (reconnect). Conflating them is what
+   * produced the old dead end — a greyed-out composer with no way back.
+   */
+  | { kind: 'error'; message: string; fatal?: boolean; turnId?: string }
 
 /**
  * Envelope for every main -> renderer stream push.
@@ -201,7 +236,8 @@ export type StreamEnvelope = {
  */
 export type IpcCalls = {
   'session:create': [CreateSessionRequest, { ok: true } | { ok: false; error: string }]
-  'session:send': [{ tabId: string; text: string }, void]
+  /** `turnId` lets the renderer's optimistic echo be de-duplicated against main's. */
+  'session:send': [{ tabId: string; text: string; turnId?: string }, { ok: boolean; error?: string }]
   'session:interrupt': [{ tabId: string }, void]
   'session:set-permission-mode': [{ tabId: string; mode: PermissionMode }, void]
   'session:set-model': [{ tabId: string; model?: string }, void]

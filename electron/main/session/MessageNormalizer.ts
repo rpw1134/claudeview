@@ -176,7 +176,11 @@ export class MessageNormalizer {
         tools: message.tools ?? [],
         agents: message.agents ?? [],
       },
-      { kind: 'status', status: 'ready' },
+      // Deliberately no status. `system/init` reports *identity*; it says nothing
+      // about whether a turn is running. It used to emit `'ready'`, and because
+      // the CLI only initialises once it has a first user message, that landed in
+      // the same batch as the `'thinking'` from `send()` and overwrote it — so the
+      // UI showed nothing at all between Enter and the model's first token.
     ]
   }
 

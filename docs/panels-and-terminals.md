@@ -49,12 +49,14 @@ renders at half size with dead space beside it.
 keeping it out of the components. The load-bearing assertion is **coverage**: after
 any sequence of inserts, removes and moves, panel areas sum to exactly 1.
 
-The same suite covers attachment composition and the chip row, for a different
-reason: the path that *produces* chips can't be automated (a real path needs a real
-drop), so the component is rendered directly instead.
+The same suite covers attachment composition, the chip row, and the error row, for a
+different reason: the paths that *produce* them can't be automated. A real dropped
+path needs a real drop, and a session dying mid-conversation can't be summoned on
+demand — which is exactly why the error path is worth pinning down rather than
+finding out about in the moment. Those components are rendered directly instead.
 
 ```
-49 passed, 0 failed
+55 passed, 0 failed
 ```
 
 ## Rearranging
@@ -158,8 +160,14 @@ relaunch.
 
 ## Activity
 
-While a turn is running, the panel header shows a moving glyph, what the agent is
-doing, and how long it's been doing it:
+The moment you press Enter, three things happen in the same frame: your message
+appears, the composer switches to "Queue a follow-up…", and the indicator starts —
+**13ms**, measured. None of it waits for the model, or even for the main process.
+
+The labelled indicator sits at the **tail of the transcript**, where your eye
+already is after sending. The panel header carries a silent glyph for the panels
+you're *not* looking at. It shows what the agent is doing and how long it's been
+doing it:
 
 | Phase | Glyph |
 | --- | --- |
@@ -175,6 +183,17 @@ drop the word and the clock.
 All three animate `transform` and `opacity` only, so they stay on the compositor and
 never trigger layout — they run continuously, in up to eight panels, beside a
 transcript already being repainted every frame.
+
+### Failures
+
+Errors are **transcript items**, not a strip above the composer. They sit where they
+happened, in order, and a send that failed keeps its text so it can be resent with
+one click. A strip lost both facts: which message failed, and every error but the
+last.
+
+A retry button appears only when resending would actually help. A session that died
+can't be fixed by sending the same message again, so that case offers Reconnect
+instead — offering a button that can't work just costs a second failure to find out.
 
 ## Focus
 

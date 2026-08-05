@@ -57,12 +57,23 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false,
       webviewTag: false,
+      /*
+       * Keep rendering when the window isn't frontmost.
+       *
+       * Chromium stops `requestAnimationFrame` entirely for an occluded window, and
+       * this app's text reveal is driven by rAF (`src/lib/streamBuffers.ts`). With
+       * throttling on, a turn that streams while ClaudeView sits behind an editor
+       * freezes mid-sentence and then snaps to the end when you switch back —
+       * because the backlog has grown past the instant-reveal threshold. Watching a
+       * long run in a side window is exactly what this app is for, so the frames
+       * are worth the battery.
+       */
+      backgroundThrottling: false,
     },
   })
 
   // Avoid a white flash before React paints.
   window.once('ready-to-show', () => window?.show())
-
 
   // Any link the model emits opens in the real browser, never in-app — an in-app
   // navigation would replace the UI with an attacker-influenced page.

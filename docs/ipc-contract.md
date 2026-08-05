@@ -22,6 +22,16 @@ runtime — importing the Agent SDK there would drag Node-only code into the ren
 | `app:pick-attachments` | `{directories?}` | `string[]` |
 | `app:info` | — | `{cwd, version, home}` |
 
+`session:send` carries a **`turnId`** and returns `{ok, error?}`. Both exist because
+the renderer echoes the message optimistically: the id lets main's echo be dropped
+instead of rendered twice, and the result lets a rejected send be turned back into a
+visible, retryable failure rather than a message that silently never happened.
+
+`SessionStatus` describes the **turn**, not the session lifecycle. It deliberately
+has no `'ready'` — see
+[troubleshooting](troubleshooting.md#nothing-happens-for-a-second-after-pressing-enter)
+for what sharing one field between the two axes cost.
+
 The bridge also exposes one **synchronous** function, `resolveDroppedPaths(files)`.
 It wraps `webUtils.getPathForFile`, which lives in the Electron module the renderer
 must never hold; handing back only the resolved strings keeps the capability behind
@@ -62,7 +72,7 @@ Twelve variants, closed. Ordered roughly by how hot the path is.
 | `thinking-delta` | Extended thinking, separate so the UI can collapse it |
 | `block-end` | Content block complete; the renderer stops its typewriter drain |
 | `session-init` | Session id, model, cwd, permission mode, tools. Once per session |
-| `status` | Lifecycle, driving the panel header's activity indicator |
+| `status` | Turn activity, driving the activity indicator |
 | `tool-start` / `tool-end` | Tool call lifecycle. Payloads pre-truncated in main |
 | `agent-start` / `agent-end` | A subagent lane opened / closed |
 | `user-message` | Echo of a user turn, so the transcript owns the conversation |

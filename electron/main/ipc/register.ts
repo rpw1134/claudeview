@@ -34,8 +34,19 @@ export function registerIpc(
     }
   })
 
-  handle('session:send', ({ tabId, text }) => {
-    sessions.get(tabId)?.send(text)
+  /**
+   * A send reports whether it was actually accepted.
+   *
+   * It used to return void, so a message posted to a disposed runner — or to a tab
+   * id with no runner at all — looked exactly like a successful one. The turn simply
+   * never happened, and the only signal was the UI sitting still.
+   */
+  handle('session:send', ({ tabId, text, turnId }) => {
+    const runner = sessions.get(tabId)
+    if (!runner) return { ok: false, error: 'This session is no longer running.' }
+    return runner.send(text, turnId)
+      ? { ok: true }
+      : { ok: false, error: 'This session has ended and cannot accept messages.' }
   })
 
   handle('session:interrupt', async ({ tabId }) => {

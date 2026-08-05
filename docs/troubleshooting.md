@@ -172,6 +172,53 @@ messages, per lane.
 
 ---
 
+## Nothing happens for a second after pressing Enter
+
+**Symptom.** You send a message and the UI sits still — no message, no spinner —
+until the model's first token arrives.
+
+**Cause 1: `ready` overwrote `thinking`.** `send()` set `status: 'thinking'`, then
+`system/init` set `status: 'ready'`. Because the CLI only initialises once it has a
+first user message, both landed in the *same* 16ms batch, and the reducer applies a
+batch in order — so the last one won and React never rendered `thinking` at all.
+Measured: the indicator first appeared at **1173ms** on a first message, and not at
+all on turns that were slower to start.
+
+Session lifecycle and turn activity were sharing one field. `system/init` now
+reports identity only, and `'ready'` is gone from `SessionStatus`.
+
+**Cause 2: the echo round-tripped.** The user's own message was only rendered when
+main echoed it back — a measured ~150ms of nothing after Enter. The renderer now
+applies it locally first and tags it with a `turnId` so main's copy is dropped
+rather than duplicated.
+
+**Cause 3: the indicator was in the wrong place.** It lived only in the panel
+header. After pressing Enter your eye is at the bottom of the transcript, so the one
+place you were looking was the one place nothing changed. The labelled indicator is
+now at the tail of the conversation; the header keeps a silent glyph for panels
+you're *not* looking at.
+
+Together: **13ms** from Enter to message-plus-indicator.
+
+---
+
+## A stream freezes, then jumps to the end when I switch back to the window
+
+Chromium stops `requestAnimationFrame` entirely for an **occluded** window, and the
+text reveal is rAF-driven (`src/lib/streamBuffers.ts`). While ClaudeView sat behind
+another window the reveal cursor stopped advancing; on return, the backlog exceeded
+`INSTANT_THRESHOLD` and the whole answer appeared at once.
+
+Fixed with `backgroundThrottling: false` in the window's `webPreferences`. Watching
+a long run in a side window is the point of this app, so the frames are worth the
+battery.
+
+This one is easy to mistake for "the model produced nothing" — an automated check
+that drives the app while the window is behind an editor sees an empty transcript
+and a completed turn.
+
+---
+
 ## A resumed transcript shows every line twice
 
 Fixed, but worth understanding if you touch `streamBuffers`. Block ids come from

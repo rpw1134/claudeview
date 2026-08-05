@@ -16,7 +16,16 @@ import type { PermissionMode, SessionStatus } from '@shared/ipc'
 export type TranscriptItem =
   | { kind: 'text'; id: string; blockId: string }
   | { kind: 'thinking'; id: string; blockId: string }
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; turnId?: string }
+  /**
+   * A failure, in the place it happened.
+   *
+   * Errors used to live in a single `lastError` field rendered as a strip above the
+   * composer, which lost both the ordering (which message failed?) and the history
+   * (a second error overwrote the first). As an item it sits where it occurred, and
+   * a failed send can offer to resend exactly the text that didn't go.
+   */
+  | { kind: 'error'; id: string; message: string; fatal: boolean; retryText?: string }
   | {
       kind: 'tool'
       id: string
@@ -70,6 +79,12 @@ export type Tab = {
   createdAt: number
   /** Block ids already materialized as items, so a delta doesn't re-create one. */
   seenBlockIds: Set<string>
+  /**
+   * Turn ids the renderer has already echoed optimistically. Main's echo of the
+   * same turn is dropped, so the message renders once — at 0ms rather than after
+   * the IPC round trip.
+   */
+  echoedTurnIds: Set<string>
 }
 
 /** The slice of a tab persisted to localStorage so sessions survive a restart. */

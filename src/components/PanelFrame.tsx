@@ -89,14 +89,14 @@ export const PanelFrame = memo(function PanelFrame({
 
         <span className={cn('truncate', focused ? 'text-text' : 'text-text-muted')}>{title}</span>
 
-        {/* Activity sits next to the title, where the eye already is. Narrow panels
-            keep the glyph and drop the word and clock. */}
-        {tab && isBusy ? (
-          <>
-            <ActivityIndicator status={tab.status} compact className="@[26rem]:hidden" />
-            <ActivityIndicator status={tab.status} className="hidden @[26rem]:flex" />
-          </>
-        ) : null}
+        {/*
+          Glyph only. The transcript carries the labelled indicator, at the tail of
+          the conversation where you're actually looking after pressing Enter;
+          spelling out "Thinking 0s" here as well says the same thing twice, a
+          hand's width apart. This one exists for the panels you're *not* looking
+          at — it's how a background panel says it's still working.
+        */}
+        {tab && isBusy ? <ActivityIndicator status={tab.status} compact /> : null}
 
         <span
           className="ml-auto truncate font-mono text-xs text-text-faint"

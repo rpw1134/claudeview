@@ -31,6 +31,14 @@ const LABELS: Partial<Record<SessionStatus, string>> = {
   tool: 'Working',
 }
 
+/**
+ * Statuses that mean "a turn is in flight".
+ *
+ * `starting` is deliberately excluded: the subprocess coming up is not a turn, and
+ * treating it as one made a freshly opened panel look busy before anything had been
+ * asked of it.
+ */
+
 export function isBusyStatus(status: SessionStatus): boolean {
   return status === 'thinking' || status === 'streaming' || status === 'tool'
 }
@@ -51,8 +59,12 @@ export function ActivityIndicator({
 
   return (
     <span
-      role="status"
-      aria-label={`${label}, ${elapsed} seconds elapsed`}
+      // The compact form is a silent duplicate of the labelled one in the
+      // transcript. Two live regions announcing "Thinking" every second is worse
+      // than one, so only the labelled form speaks.
+      {...(compact
+        ? { 'aria-hidden': true }
+        : { role: 'status', 'aria-label': `${label}, ${elapsed} seconds elapsed` })}
       className={cn('flex items-center gap-1.5 text-xs text-accent', className)}
     >
       <Glyph status={status} />

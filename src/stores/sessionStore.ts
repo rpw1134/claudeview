@@ -30,6 +30,8 @@ type SessionState = {
   renameTab: (tabId: string, title: string) => void
 
   send: (tabId: string, text: string) => Promise<void>
+  /** Resend a failed turn, removing the error row it came from. */
+  retry: (tabId: string, itemId: string, text: string) => Promise<void>
   /** Restart a tab's session in place after it ended or failed. */
   reconnect: (tabId: string) => Promise<void>
   interrupt: (tabId: string) => Promise<void>
@@ -60,6 +62,7 @@ function emptyTab(id: string, options: Partial<CreateSessionRequest> & { title?:
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
     createdAt: Date.now(),
     seenBlockIds: new Set(),
+    echoedTurnIds: new Set(),
   }
 }
 
@@ -109,6 +112,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
   const lanes: Record<string, Lane> = { ...tab.lanes }
   const laneOrder = [...tab.laneOrder]
   const seenBlockIds = tab.seenBlockIds
+  const echoedTurnIds = tab.echoedTurnIds
   const touched = new Set<string>()
 
   let status = tab.status
@@ -172,8 +176,13 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         break
 
       case 'user-message': {
+        // Already on screen from the optimistic echo. Dropping main's copy is what
+        // lets the message appear instantly without ever rendering twice.
+        if (event.turnId && echoedTurnIds.has(event.turnId)) break
+
+        if (event.turnId) echoedTurnIds.add(event.turnId)
         const lane = laneFor(event.agent.id)
-        lane.items.push({ kind: 'user', id: newId(), text: event.text })
+        lane.items.push({ kind: 'user', id: newId(), text: event.text, turnId: event.turnId })
         // First user turn names the tab, so the tab strip is readable at a glance.
         if (title === 'New session' && event.agent.id === MAIN_LANE) {
           title = event.text.replace(/\s+/g, ' ').trim().slice(0, 48) || title
@@ -265,9 +274,19 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         }
         break
 
-      case 'error':
+      case 'error': {
         lastError = event.message
+        // In the transcript, in order, rather than in a strip that only ever shows
+        // the most recent failure.
+        const lane = laneFor(MAIN_LANE)
+        lane.items.push({
+          kind: 'error',
+          id: newId(),
+          message: event.message,
+          fatal: event.fatal === true,
+        })
         break
+      }
     }
   }
 
@@ -289,6 +308,39 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     lanes,
     laneOrder,
     seenBlockIds,
+    echoedTurnIds,
+  }
+}
+
+/**
+ * Attach retry text to the most recent error in the main lane.
+ *
+ * Done as a follow-up rather than carried on the `error` event because the event
+ * contract is shared with the main process, which has no idea what the renderer
+ * typed — the failed text is renderer-local knowledge.
+ */
+function withRetryText(tab: Tab, text: string): Tab {
+  const lane = tab.lanes[MAIN_LANE]
+  if (!lane) return tab
+
+  const index = lane.items.findLastIndex((item) => item.kind === 'error')
+  if (index === -1) return tab
+
+  const items = [...lane.items]
+  items[index] = { ...(items[index] as Extract<TranscriptItem, { kind: 'error' }>), retryText: text }
+  return { ...tab, lanes: { ...tab.lanes, [MAIN_LANE]: { ...lane, items } } }
+}
+
+/** Drop one item from the main lane, for dismissing a resolved error. */
+function withoutItem(tab: Tab, itemId: string): Tab {
+  const lane = tab.lanes[MAIN_LANE]
+  if (!lane) return tab
+  return {
+    ...tab,
+    lanes: {
+      ...tab.lanes,
+      [MAIN_LANE]: { ...lane, items: lane.items.filter((item) => item.id !== itemId) },
+    },
   }
 }
 
@@ -395,9 +447,54 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
       return { tabs }
     }),
 
+  /**
+   * Send a turn, showing it immediately.
+   *
+   * The message and the "thinking" state are applied **locally, first**, then the
+   * IPC call goes out. Waiting for main to echo the message back cost a measured
+   * ~150ms of nothing-happening after Enter — small in isolation, but it's the very
+   * first frame of every interaction, and it read as the app being slow to react.
+   *
+   * The echo is not a guess about what main will do: `turnId` ties the two together
+   * so main's copy is dropped rather than duplicated, and a rejected send turns the
+   * optimistic state into a visible failure with the text preserved for retry.
+   * Optimism that can't be walked back is just a lie.
+   */
   send: async (tabId, text) => {
     if (!text.trim()) return
-    await api['session:send']({ tabId, text })
+
+    const turnId = newId()
+    getState().applyEvents(tabId, [
+      { kind: 'user-message', text, agent: { id: MAIN_LANE }, turnId },
+      { kind: 'status', status: 'thinking' },
+    ])
+
+    let response: { ok: boolean; error?: string }
+    try {
+      response = await api['session:send']({ tabId, text, turnId })
+    } catch (error) {
+      response = { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+
+    if (!response.ok) {
+      getState().applyEvents(tabId, [
+        { kind: 'error', message: response.error ?? 'The message could not be sent.' },
+        { kind: 'status', status: 'error' },
+      ])
+      // Attach the text to the error row so it can be resent with one click
+      // instead of being retyped.
+      setState((state) => ({
+        tabs: state.tabs.map((tab) => (tab.id === tabId ? withRetryText(tab, text) : tab)),
+      }))
+    }
+  },
+
+  /** Resend a turn that failed, clearing the error row it came from. */
+  retry: async (tabId, itemId, text) => {
+    setState((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? withoutItem(tab, itemId) : tab)),
+    }))
+    await getState().send(tabId, text)
   },
 
   /**
@@ -435,6 +532,7 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
               laneOrder: [MAIN_LANE],
               activeLaneId: MAIN_LANE,
               seenBlockIds: new Set<string>(),
+              echoedTurnIds: new Set<string>(),
             }
           : entry,
       ),
