@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import {
   applyAppearance,
   DEFAULT_APPEARANCE,
+  MEASURE_FULL,
   resolveColorway,
   resolveFont,
   type Appearance,
@@ -37,9 +38,9 @@ export const useAppearanceStore = create<AppearanceState>()(
     }),
     {
       name: 'claudeview.appearance',
-      version: 2,
+      version: 3,
       /**
-       * v1 -> v2: move anyone still on the *old defaults* onto the new ones.
+       * Move anyone still on the *old defaults* onto the new ones, per version.
        *
        * A persisted setting normally beats a changed default — that's the point of
        * persisting it. But values that exactly match the previous defaults were
@@ -52,14 +53,17 @@ export const useAppearanceStore = create<AppearanceState>()(
        */
       migrate: (persisted, from) => {
         const state = persisted as Partial<Appearance>
-        if (from >= 2) return state
 
-        const OLD_DEFAULTS = { colorway: 'slate', lineHeight: 1.6, measure: 72 } as const
-        if (state.colorway === OLD_DEFAULTS.colorway) state.colorway = DEFAULT_APPEARANCE.colorway
-        if (state.lineHeight === OLD_DEFAULTS.lineHeight) {
-          state.lineHeight = DEFAULT_APPEARANCE.lineHeight
+        // v1 -> v2: the warm palette became the default.
+        if (from < 2) {
+          if (state.colorway === 'slate') state.colorway = DEFAULT_APPEARANCE.colorway
+          if (state.lineHeight === 1.6) state.lineHeight = DEFAULT_APPEARANCE.lineHeight
+          if (state.measure === 72) state.measure = 84
         }
-        if (state.measure === OLD_DEFAULTS.measure) state.measure = DEFAULT_APPEARANCE.measure
+
+        // v2 -> v3: responses fill the panel instead of capping at 84ch.
+        if (from < 3 && state.measure === 84) state.measure = MEASURE_FULL
+
         return state
       },
       partialize: (state) => ({

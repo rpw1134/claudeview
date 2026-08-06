@@ -9,6 +9,7 @@ import './layoutTree.test'
 import './attachments.test'
 import './attachmentChips.test'
 import './errorRow.test'
+import './elapsed.test'
 import { report } from './harness'
 
 report()

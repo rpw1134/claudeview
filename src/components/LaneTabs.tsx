@@ -30,7 +30,7 @@ export function LaneTabs({ tab, onSelect }: { tab: Tab; onSelect: (laneId: strin
          * Transcript gutters are 12 / 20 / 32, hence 0 / 8 / 20 here.
          */
         className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] items-center gap-1
-                   overflow-x-auto px-0 pt-3 @[30rem]:px-2 @[48rem]:px-5"
+                   overflow-x-auto px-2 pt-3 @[30rem]:px-5 @[48rem]:px-8"
       >
         {tab.laneOrder.map((laneId) => {
           const lane = tab.lanes[laneId]

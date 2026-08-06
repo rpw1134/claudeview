@@ -10,7 +10,8 @@ its own composer.
 │ ▪ title  ⠿ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
 │   transcript             │   xterm + PTY         this panel is     │
 │   ─────────────────────  │                       focused           │
-│   [auto] 📎 message…  ↑  │   (keystrokes go straight to the shell) │
+│   message…               │   (keystrokes go straight to the shell) │
+│              [auto] 📎 ↑ │                                         │
 └──────────────────────────┴─────────────────────────────────────────┘
 ```
 
@@ -56,7 +57,7 @@ demand — which is exactly why the error path is worth pinning down rather than
 finding out about in the moment. Those components are rendered directly instead.
 
 ```
-55 passed, 0 failed
+62 passed, 0 failed
 ```
 
 ## Rearranging
@@ -121,17 +122,29 @@ a given composer has. So the gutters are `@container` queries against the **pane
 
 | Panel width | Gutter |
 | --- | --- |
-| < 30rem | 12px |
-| 30–48rem | 20px |
-| ≥ 48rem | 32px |
+| < 30rem | 16px |
+| 30–48rem | 28px |
+| ≥ 48rem | 40px |
 
-The transcript uses the same three values, and both cap at the same
-`measure + 8rem` box — so the composer shell lines up under the prose at every
-density, and its right edge lines up with the user bubbles and tool rows above it.
+The transcript, lane tabs and reconnect row use the same three values, and the
+toolbar's right gutter is the widest of them plus the mosaic's own 8px padding — so
+its last control lands on the same vertical line as the content below it.
 
-**The nesting order is load-bearing.** Padding applied *outside* the width cap
-offsets the composer from the prose by exactly the gutter width. Measured before the
-fix: prose at x=268, composer shell at x=236. Cap first, gutter inside.
+Nothing is width-capped any more. `--measure` defaults to `none`, and Settings ▸
+Line width reins prose back in if you want it; the top of that slider is "full
+width".
+
+### Controls on one side
+
+The composer is two rows: the message across the full width, then every control on
+the right — permission mode, attach, send. They used to be interleaved with the
+text, so the input started a third of the way across and the eye stepped over two
+widgets to reach the thing it was there to use.
+
+Permission mode is a real menu rather than a native `<select>`, because "Bypass" and
+"Don't ask" mean nothing until something says what they permit. Each option carries a
+one-line description, and picking either of the two that let the agent act without
+prompting turns the chip warning-coloured with a shield.
 
 ## Attachments
 
@@ -161,7 +174,7 @@ relaunch.
 ## Activity
 
 The moment you press Enter, three things happen in the same frame: your message
-appears, the composer switches to "Queue a follow-up…", and the indicator starts —
+appears, the composer switches to "Add to the pile…", and the indicator starts —
 **13ms**, measured. None of it waits for the model, or even for the main process.
 
 The labelled indicator sits at the **tail of the transcript**, where your eye
@@ -171,9 +184,12 @@ doing it:
 
 | Phase | Glyph |
 | --- | --- |
-| Thinking / starting | a slow breathing dot |
-| Writing | a left-to-right wave |
-| Running a tool | a rotating arc |
+| Thinking / starting | the mark breathes |
+| Writing | its arms ripple outward in sequence |
+| Running a tool | it rotates |
+
+Elapsed time reads `12s` below a minute and `1m 05s` above it — `90s` is arithmetic
+the reader has to do.
 
 A long turn is indistinguishable from a hung one if nothing moves, which is why the
 terminal client shows a spinner and a clock. Shape and motion carry the phase, not
@@ -183,6 +199,22 @@ drop the word and the clock.
 All three animate `transform` and `opacity` only, so they stay on the compositor and
 never trigger layout — they run continuously, in up to eight panels, beside a
 transcript already being repainted every frame.
+
+### Drafts belong to the session
+
+The composer's unsent text lives on the **tab**, not in the component. A composer
+unmounts whenever the layout tree changes shape — opening a panel wraps its sibling
+in a new split, remounting that subtree — and component state took a half-written
+message down with it. Losing what someone typed is a data-loss bug however small the
+component holding it.
+
+### Success is silent
+
+Tool rows only mark *failures*. A tick on every successful call produced a column of
+identical glyphs down the right edge, each one needing a look to discover it said
+nothing. A failure tints the whole row and turns its name red, because that's
+something you want to catch while scrolling past — a 13px icon at the far margin
+isn't.
 
 ### Failures
 

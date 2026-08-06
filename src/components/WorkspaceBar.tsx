@@ -31,8 +31,17 @@ export function WorkspaceBar({
   return (
     <div
       data-drag-region
-      className="flex h-12 shrink-0 items-center gap-2 bg-surface/70 px-3"
-      style={{ paddingLeft: isMac ? 84 : 12 }}
+      /*
+       * The right gutter is the mosaic's outer padding (8px) plus a panel's own
+       * (40px), so the settings button lands on exactly the same vertical line as
+       * the content beneath it. Getting this wrong by 16px is invisible until you
+       * look for it and then impossible to unsee.
+       *
+       * The left can't match: the traffic lights own that space on macOS. Nothing
+       * else can sit there, so there's nothing to align to.
+       */
+      className="flex h-12 shrink-0 items-center gap-2 bg-surface/70 pr-12"
+      style={{ paddingLeft: isMac ? 84 : 16 }}
     >
       <Button variant="subtle" size="md" onClick={() => onAddSession('row')} disabled={atCapacity}>
         <MessageSquarePlus size={14} />

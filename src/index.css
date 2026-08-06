@@ -101,7 +101,7 @@
   --font-display: 'Bradley Hand', 'Noteworthy', 'Marker Felt', 'Segoe Print', var(--font-body);
   --font-size-base: 15px;
   --line-height-body: 1.65;
-  --measure: 84ch;
+  --measure: none;
 
   color-scheme: light;
 }
@@ -237,13 +237,13 @@ textarea,
  * chrome. Vertical rhythm is on a 4px grid to match the spacing scale.
  */
 /*
- * The measure applies to running text, not to the container.
+ * Line length is opt-in, and applies to running text only.
  *
- * Capping the whole block made code samples and tables wrap inside a column narrower
- * than the panel they sat in — punishing them for a rule that exists only for prose.
- * Now paragraphs, lists and headings cap at `--measure` while `pre` and `table` use
- * the width available. This is also what lets the transcript be full-width and
- * left-aligned without lines running to 160 characters.
+ * `--measure` defaults to `none`: agent output fills the panel, because output is
+ * what the app is for and the classic 45–75ch guidance assumes a fixed page rather
+ * than a panel whose width you chose. Settings ▸ Line width reins it back in, and
+ * when it does it binds paragraphs, lists and headings — never `pre` or `table`,
+ * which were being punished for a rule that only exists for prose.
  */
 .prose-stream {
   max-width: none;

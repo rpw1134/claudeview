@@ -39,7 +39,7 @@ answer is almost certainly no.
 
 | Treatment | Where |
 | --- | --- |
-| The mark (`Mark.tsx`) | Activity, the agent's rail glyph, the wordmark, the app icon |
+| The mark (`Mark.tsx`) | The activity line, the thinking toggle, the wordmark, the app icon |
 | Written face (`--font-display`) | The wordmark, and one home-screen heading. Nothing else. |
 | Uneven corners (`hand-1`, `hand-2`, `hand-sm-*`) | Panels, notes, buttons, the composer |
 | Drawn rules (`Sketch.tsx`) | Section breaks |
@@ -144,31 +144,36 @@ groups, so proximity alone shows what belongs together:
 
 ### Alignment
 
-The transcript is a **chat thread**: the agent on the left behind a narrow rail
-carrying the mark, your turns on the right behind a mirrored one. Side is what tells
-you who said what while scrolling fast.
+The transcript is a **chat thread**, and the agent gets the whole width.
 
-Bubbles cap at 78% and deliberately **cross the centreline**. Capping at half leaves
-a hard channel down the middle and squeezes a long message into a ribbon; the
-overlap keeps the alignment legible while letting either side use the room.
+Agent output — prose, code, tables, tool rows — runs edge to edge inside the panel's
+gutter. No rail, no indent, no centred column. That output is what the app is for, so
+anything insetting it is spending width on decoration. Your turns are the exception:
+right-aligned, tinted, capped at 78% so they **cross the centreline** — capping at
+half leaves a hard channel down the middle and squeezes a long message into a ribbon.
 
-Everything the agent produces — prose, tool rows, thinking, errors — hangs off the
-left rail, so the two sides stay unambiguous.
+Side alone carries authorship, which is why the agent needs no marker per message.
+Separation between turns is **vertical**: 32px above each of your messages and 20px
+below, tighter spacing within a single response. Gestalt proximity does the grouping
+a rail used to do, without costing any width.
 
-It used to be `mx-auto` on a `measure + 8rem` box. In a wide panel that leaves an
-empty margin on *both* sides, and the wider the panel the more of it is nothing.
-The rail turns the leftmost strip from margin into structure, and gives the
-conversation a spine you can scan without reading.
+Two earlier versions of this were wrong in opposite directions. `mx-auto` on a
+`measure + 8rem` box left an empty margin on *both* sides, and the wider the panel
+the more of it was nothing. Replacing that with a left rail for every row fixed the
+centring but still indented the content and put a glyph above a glyph whenever a turn
+both thought and spoke.
 
 **The measure applies to paragraphs, not the container.** `--measure` caps `p`,
 `ul`, `ol`, `blockquote` and headings inside `.prose-stream`; `pre` and `table` use
 the full width. Capping the container punished code and tables for a rule that only
 exists for running text.
 
-Gutters are `@container` queries against the **panel** (12 / 20 / 32px), because
+Gutters are `@container` queries against the **panel** — **16 / 28 / 40px** — because
 once you can split eight ways the window's width says nothing about how much room a
-given panel has. The composer uses the same three values so it lines up with the
-prose at every density.
+given panel has. The transcript, composer, lane tabs and reconnect row all use the
+same three values, and the toolbar's right gutter is the widest of them plus the
+mosaic's own 8px padding, so its last control lands on the same vertical line as the
+content below it.
 
 One trap that produced visible misalignment: **a width cap must wrap its gutter,
 not the other way around.** Padding applied outside the cap offsets the element by

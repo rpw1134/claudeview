@@ -76,6 +76,18 @@ export type Tab = {
   /** Cumulative token usage for the session, summed across turns. */
   usage: TokenUsage
   lastError?: string
+  /**
+   * The unsent message, and anything attached to it.
+   *
+   * Lives on the tab rather than in the composer's own state because a composer
+   * **unmounts whenever the layout tree changes shape** — opening a panel wraps its
+   * sibling in a new split, which remounts that subtree. Component state took a
+   * half-written message down with it, which is a data-loss bug however small the
+   * component. A draft belongs to the conversation, not to the widget currently
+   * displaying it.
+   */
+  draft: string
+  draftAttachments: string[]
   createdAt: number
   /** Block ids already materialized as items, so a delta doesn't re-create one. */
   seenBlockIds: Set<string>

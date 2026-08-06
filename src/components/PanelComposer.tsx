@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Folder, FileText, Paperclip, Square, X } from 'lucide-react'
+import { PermissionMenu } from './PermissionMenu'
 import type { PermissionMode, SessionStatus } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { basename, composeMessage, mergeAttachments } from '@/lib/attachments'
@@ -9,15 +10,6 @@ const MAX_HEIGHT_PX = 120
 const MIN_HEIGHT_PX = 28
 /** Attachments are path references, not uploads, so the cap is about legibility. */
 const MAX_ATTACHMENTS = 20
-
-const PERMISSION_OPTIONS: { value: PermissionMode; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'default', label: 'Ask' },
-  { value: 'acceptEdits', label: 'Edits' },
-  { value: 'plan', label: 'Plan' },
-  { value: 'dontAsk', label: 'No ask' },
-  { value: 'bypassPermissions', label: 'Bypass' },
-]
 
 /**
  * The composer, living inside its own session panel.
@@ -53,6 +45,9 @@ export function PanelComposer({
   permissionMode,
   panelFocused,
   autoFocusToken,
+  draft,
+  draftAttachments,
+  onDraftChange,
   onSend,
   onInterrupt,
   onPermissionModeChange,
@@ -60,6 +55,14 @@ export function PanelComposer({
   status: SessionStatus
   permissionMode: PermissionMode
   panelFocused: boolean
+  /**
+   * The unsent message, owned by the tab. Not local state: this component
+   * unmounts whenever the layout tree changes shape, which used to throw away
+   * whatever you'd typed.
+   */
+  draft: string
+  draftAttachments: string[]
+  onDraftChange: (draft: string, attachments: string[]) => void
   /**
    * Changes whenever the panel is focused *by keyboard*. Focusing the input is
    * keyed off this rather than off `panelFocused` so that clicking into the
@@ -70,8 +73,19 @@ export function PanelComposer({
   onInterrupt: () => void
   onPermissionModeChange: (mode: PermissionMode) => void
 }) {
-  const [value, setValue] = useState('')
-  const [attachments, setAttachments] = useState<string[]>([])
+  const value = draft
+  const attachments = draftAttachments
+  const setValue = useCallback(
+    (next: string | ((current: string) => string)) =>
+      onDraftChange(typeof next === 'function' ? next(draft) : next, draftAttachments),
+    [draft, draftAttachments, onDraftChange],
+  )
+  const setAttachments = useCallback(
+    (next: string[] | ((current: string[]) => string[])) =>
+      onDraftChange(draft, typeof next === 'function' ? next(draftAttachments) : next),
+    [draft, draftAttachments, onDraftChange],
+  )
+
   const [dropActive, setDropActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // Drag events fire for every child element crossing the pointer, so a plain
@@ -94,11 +108,14 @@ export function PanelComposer({
     if (autoFocusToken > 0 && !disabled) textareaRef.current?.focus()
   }, [autoFocusToken, disabled])
 
-  const addAttachments = useCallback((paths: string[]) => {
-    if (paths.length === 0) return
-    setAttachments((existing) => mergeAttachments(existing, paths, MAX_ATTACHMENTS))
-    textareaRef.current?.focus()
-  }, [])
+  const addAttachments = useCallback(
+    (paths: string[]) => {
+      if (paths.length === 0) return
+      setAttachments((existing) => mergeAttachments(existing, paths, MAX_ATTACHMENTS))
+      textareaRef.current?.focus()
+    },
+    [setAttachments],
+  )
 
   const pickAttachments = useCallback(
     async (directories: boolean) => {
@@ -134,9 +151,9 @@ export function PanelComposer({
     const text = value.trim()
     if ((!text && attachments.length === 0) || disabled) return
 
+    // The store clears the draft as part of sending; clearing here too would race
+    // with anything typed in between.
     onSend(composeMessage(text, attachments))
-    setValue('')
-    setAttachments([])
     requestAnimationFrame(() => textareaRef.current?.focus())
   }, [value, attachments, disabled, onSend])
 
@@ -165,7 +182,7 @@ export function PanelComposer({
         centred on a narrower box would sit visibly off-axis from the conversation
         it belongs to.
       */}
-      <div className="w-full px-3 pb-3 @[30rem]:px-5 @[48rem]:px-7 @[48rem]:pb-4">
+      <div className="w-full px-4 pb-4 @[30rem]:px-7 @[48rem]:px-10 @[48rem]:pb-5">
         <div
           data-focus-host
           onDragEnter={(event) => {
@@ -198,30 +215,38 @@ export function PanelComposer({
             />
           ) : null}
 
-          <div className="flex items-end gap-1 px-1.5 py-1">
-            {/*
-              Permission mode sits with the input rather than in a status strip: it
-              governs what the agent may do to your machine, so it belongs where you
-              commit an instruction.
-            */}
-            <select
-              aria-label="Permission mode"
+          {/*
+            Two rows, not one.
+
+            The old single row interleaved controls with the text — permission
+            select, paperclip, textarea, send — so the input started a third of the
+            way across and the eye had to step over two widgets to reach the thing
+            it was there to use. Splitting them gives the message the full width and
+            puts every control on one baseline, all on the right, in the order you'd
+            reach for them: what it's allowed to do, what's attached, then send.
+          */}
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={onKeyDown}
+            disabled={disabled}
+            rows={1}
+            placeholder={
+              disabled ? 'Session ended' : isBusy ? 'Add to the pile…' : 'Write something…'
+            }
+            aria-label="Message"
+            style={{ minHeight: MIN_HEIGHT_PX }}
+            className="w-full resize-none border-none bg-transparent px-3 pt-2.5 text-sm
+                       leading-relaxed text-text outline-none placeholder:text-text-faint"
+          />
+
+          <div className="flex items-center justify-end gap-1 px-2 pb-1.5">
+            <PermissionMenu
               value={permissionMode}
-              onChange={(event) => onPermissionModeChange(event.target.value as PermissionMode)}
               disabled={disabled}
-              className={cn(
-                'h-6 shrink-0 hand-sm-1 border-none bg-transparent pl-1 pr-0 text-xs outline-none',
-                permissionMode === 'bypassPermissions' || permissionMode === 'dontAsk'
-                  ? 'text-warning'
-                  : 'text-text-faint hover:text-text-muted',
-              )}
-            >
-              {PERMISSION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={onPermissionModeChange}
+            />
 
             <button
               // Alt opens the folder picker. macOS won't offer files and folders in
@@ -231,27 +256,12 @@ export function PanelComposer({
               disabled={disabled}
               aria-label="Attach files"
               title="Attach files (⌥ for folders, or drop them here)"
-              className="hand-sm-1 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
-                         text-text-faint transition-colors hover:bg-overlay hover:text-text-muted"
+              className="hand-sm-1 flex h-7 w-7 shrink-0 items-center justify-center
+                         text-text-faint transition-colors hover:bg-overlay hover:text-text-muted
+                         disabled:pointer-events-none disabled:opacity-50"
             >
-              <Paperclip size={13} />
+              <Paperclip size={14} />
             </button>
-
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              onKeyDown={onKeyDown}
-              disabled={disabled}
-              rows={1}
-              placeholder={
-                disabled ? 'Session ended' : isBusy ? 'Add to the pile…' : 'Write something…'
-              }
-              aria-label="Message"
-              style={{ minHeight: MIN_HEIGHT_PX }}
-              className="flex-1 resize-none border-none bg-transparent px-1 py-1 text-sm leading-5
-                         text-text outline-none placeholder:text-text-faint"
-            />
 
             {/* Only present when it has something to do. An always-visible solid
                 button per panel is a row of accent blocks competing for attention. */}
@@ -260,20 +270,20 @@ export function PanelComposer({
                 onClick={onInterrupt}
                 aria-label="Stop generating"
                 title="Stop (Esc)"
-                className="hand-sm-2 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
+                className="hand-sm-2 flex h-7 w-7 shrink-0 items-center justify-center
                            text-text-muted transition-colors hover:bg-overlay hover:text-text"
               >
-                <Square size={10} className="fill-current" />
+                <Square size={11} className="fill-current" />
               </button>
             ) : canSend ? (
               <button
                 onClick={submit}
                 aria-label="Send message"
                 title="Send (Enter)"
-                className="hand-sm-2 mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center
+                className="hand-sm-2 flex h-7 w-7 shrink-0 items-center justify-center
                            bg-accent text-accent-contrast transition-opacity hover:opacity-90"
               >
-                <ArrowUp size={12} />
+                <ArrowUp size={13} />
               </button>
             ) : null}
           </div>

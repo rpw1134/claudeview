@@ -76,7 +76,6 @@ function createWindow(): void {
   window.once('ready-to-show', () => window?.show())
 
 
-
   // Any link the model emits opens in the real browser, never in-app — an in-app
   // navigation would replace the UI with an attacker-influenced page.
   window.webContents.setWindowOpenHandler(({ url }) => {

@@ -307,19 +307,26 @@ export type Appearance = {
   fontSize: number
   /** Body line-height multiplier — the biggest lever on long-form readability. */
   lineHeight: number
-  /** Transcript measure in ch. 45–75 is the readable range; ~66 is the classic. */
+  /**
+   * Optional cap on prose line length, in `ch`.
+   *
+   * `MEASURE_FULL` means no cap: agent output runs the full width of its panel.
+   * That's the default, because output is what the app is for and the classic
+   * 45–75ch advice assumes a page, not a resizable panel you chose the width of.
+   * Anything below the top of the range reins it back in.
+   */
   measure: number
 }
+
+/** Top of the line-width range: no cap at all. */
+export const MEASURE_FULL = 120
 
 export const DEFAULT_APPEARANCE: Appearance = {
   colorway: 'paper',
   font: 'system',
   fontSize: 15,
   lineHeight: 1.65,
-  // Wider than the classic 66ch. The transcript is left-aligned against a rail
-  // rather than centred in the panel, so the measure sets where text *wraps*, not
-  // how much of the window sits empty — and code and tables want the room.
-  measure: 84,
+  measure: MEASURE_FULL,
 }
 
 /** Colorway ids that existed in earlier builds, mapped to their replacements. */
@@ -361,7 +368,12 @@ export function applyAppearance(appearance: Appearance): void {
   root.style.setProperty('--font-display', DISPLAY_STACK)
   root.style.setProperty('--font-size-base', `${appearance.fontSize}px`)
   root.style.setProperty('--line-height-body', String(appearance.lineHeight))
-  root.style.setProperty('--measure', `${appearance.measure}ch`)
+  // `none` rather than a very large ch value, so `max-width` genuinely doesn't
+  // apply and a wide panel is filled edge to edge.
+  root.style.setProperty(
+    '--measure',
+    appearance.measure >= MEASURE_FULL ? 'none' : `${appearance.measure}ch`,
+  )
 
   // Lets the OS render scrollbars and native controls to match.
   root.style.colorScheme = colorway.scheme

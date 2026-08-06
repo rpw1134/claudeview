@@ -79,11 +79,25 @@ export function ActivityIndicator({
         <>
           <span>{label}…</span>
           {/* Tabular figures so the width doesn't twitch as the count ticks. */}
-          <span className="text-xs text-text-faint tabular-nums">{elapsed}s</span>
+          <span className="text-xs text-text-faint tabular-nums">{formatElapsed(elapsed)}</span>
         </>
       )}
     </span>
   )
+}
+
+/**
+ * Seconds until a minute has passed, then minutes and seconds.
+ *
+ * `90s` is arithmetic the reader has to do; `1m 30s` is a duration. Below a minute
+ * the unit is unambiguous and the extra `0m` would just be noise, so the switch
+ * happens exactly where the number stops being readable at a glance.
+ */
+export function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  // Padded, so the string stops changing width once past a minute.
+  return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
 }
 
 function markStateFor(status: SessionStatus): MarkState {
