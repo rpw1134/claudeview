@@ -80,7 +80,7 @@ export function NewSessionPanel({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-5xl px-8 py-12 lg:px-14 lg:py-16">
+      <div className="mx-auto w-full max-w-5xl px-10 py-12 lg:py-16">
         <Wordmark />
         <p className="mt-3 max-w-[58ch] text-sm leading-relaxed text-text-muted">
           Sessions and terminals, side by side. Drag a panel by its header to move it,

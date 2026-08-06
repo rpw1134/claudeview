@@ -5,18 +5,40 @@ panel is either a Claude **session** or a **terminal**, and each session panel o
 its own composer.
 
 ```
-┌─ WorkspaceBar ──── add panel · split direction · tidy · settings ──┐
-├──────────────────────────┬─────────────────────────────────────────┤
-│ ▪ title  ⠿ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
-│   transcript             │   xterm + PTY         this panel is     │
-│   ─────────────────────  │                       focused           │
+                                   ⊞ ⊟ │ ◫ ⊟ ⊞ │ ⚙   ← toolbar: no fill, flush right
+┌──────────────────────────┬─────────────────────────────────────────┐
+│ ▪ title  ✳ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
+│   transcript, full width │   xterm + PTY         this panel is     │
+│                          │                       focused           │
 │   message…               │   (keystrokes go straight to the shell) │
 │              [auto] 📎 ↑ │                                         │
 └──────────────────────────┴─────────────────────────────────────────┘
 ```
 
-Nothing sits at the bottom of the *window*. Input and status live inside the panels
-that own them.
+Nothing sits at the bottom of the *window*, and the toolbar has no fill — input and
+status live inside the panels that own them, and the panel header is the only
+labelled band on screen.
+
+## Why the toolbar is flush right
+
+Its controls used to start on the left, which on macOS means starting **after the
+traffic lights** — 84px in, while panel content below begins at 48px (the mosaic's
+8px padding plus a panel's 40px gutter). No tuning fixes that: the OS owns the
+top-left corner and nothing can share it.
+
+So nothing tries. The left is empty drag region, the controls sit against the right
+edge on the same vertical line as the content beneath them (measured: last control,
+prose and composer all end at x=1232), and there's no left-aligned chrome left to
+be misaligned.
+
+Dropping the toolbar's fill mattered as much. Two stacked filled bands — toolbar,
+then panel header — put two claims on the same piece of hierarchy before any content
+appeared. Without it there is one labelled strip, and the toolbar reads as floating
+controls rather than a second title bar.
+
+The icons are all one size, matching the split controls. Text labels there competed
+with panel titles directly below them at similar weight, for actions that have
+shortcuts the home screen teaches on first run.
 
 ## The layout is a split tree
 
