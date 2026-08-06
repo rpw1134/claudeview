@@ -31,10 +31,16 @@ one. It gets its own ramp (`PAPER_RAMP`) for that reason.
 
 Accents and assets only — never prose, never panel headers, never code.
 
+The written face in particular is on a hard budget: **two strings in the whole
+app**. It reached eleven usages at one point — subtitles, field labels, the split
+control, the activity label ticking away once a second — and a voice used that
+often stops being a voice and becomes the typeface. If you're adding a third, the
+answer is almost certainly no.
+
 | Treatment | Where |
 | --- | --- |
 | The mark (`Mark.tsx`) | Activity, the agent's rail glyph, the wordmark, the app icon |
-| Written face (`--font-display`) | Wordmark, home-screen headings, activity labels, empty states |
+| Written face (`--font-display`) | The wordmark, and one home-screen heading. Nothing else. |
 | Uneven corners (`hand-1`, `hand-2`, `hand-sm-*`) | Panels, notes, buttons, the composer |
 | Drawn rules (`Sketch.tsx`) | Section breaks |
 | Paper grain | The window background |
@@ -138,10 +144,16 @@ groups, so proximity alone shows what belongs together:
 
 ### Alignment
 
-The transcript is a **rail plus content**, left-aligned and full width — not a
-centred column. Every row is `[rail | content]`: the rail is a narrow left strip
-carrying one glyph (the mark for the agent, a pen for you), and everything to its
-right shares one left edge.
+The transcript is a **chat thread**: the agent on the left behind a narrow rail
+carrying the mark, your turns on the right behind a mirrored one. Side is what tells
+you who said what while scrolling fast.
+
+Bubbles cap at 78% and deliberately **cross the centreline**. Capping at half leaves
+a hard channel down the middle and squeezes a long message into a ribbon; the
+overlap keeps the alignment legible while letting either side use the room.
+
+Everything the agent produces — prose, tool rows, thinking, errors — hangs off the
+left rail, so the two sides stay unambiguous.
 
 It used to be `mx-auto` on a `measure + 8rem` box. In a wide panel that leaves an
 empty margin on *both* sides, and the wider the panel the more of it is nothing.

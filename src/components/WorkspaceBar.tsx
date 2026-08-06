@@ -47,7 +47,7 @@ export function WorkspaceBar({
 
       {/* Which way the next panel splits the focused one. Dragging can rearrange
           afterwards; this just avoids an obvious extra drag for the common case. */}
-      <span className="font-display text-sm text-text-faint">split</span>
+      <span className="text-xs text-text-faint">Split</span>
       <Button
         variant="ghost"
         size="icon"
@@ -81,7 +81,7 @@ export function WorkspaceBar({
       </Button>
 
       <div className="ml-auto flex items-center gap-2">
-        <span className="font-display text-sm text-text-faint">
+        <span className="text-xs text-text-faint">
           {panelCount}/{MAX_PANELS}
         </span>
         <Button

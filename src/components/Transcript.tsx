@@ -21,11 +21,15 @@ import { cn } from '@/lib/utils'
  * floating in the middle of a window with nothing holding it — and the wider the
  * panel, the more of it is nothing.
  *
- * Now every row is `[rail | content]`. The rail is a narrow left column carrying
- * one glyph per row: the mark for the agent, a pen for you, a chevron for tools.
- * That does three things at once — it anchors the text to the left edge instead of
- * floating it, it gives the conversation a spine you can scan without reading, and
- * it turns the leftmost strip from empty margin into structure.
+ * Now the agent's side is `[rail | content]`: a narrow left column carrying the
+ * mark, with prose, tools and thinking hanging off it. That anchors the text to the
+ * left edge instead of floating it, gives the conversation a spine you can scan
+ * without reading, and turns the leftmost strip from empty margin into structure.
+ *
+ * Your turns sit on the **right**, mirrored — side is what tells you who said what
+ * at a glance, and it's the cue that survives scrolling fast. The bubbles cross the
+ * centreline rather than stopping at it: a hard 50% channel down the middle turns a
+ * long message into a ribbon.
  *
  * ## Where the measure applies now
  *
@@ -36,10 +40,10 @@ import { cn } from '@/lib/utils'
  *
  * ## Hierarchy
  *
- *   1. Agent prose — full-contrast text. The content.
- *   2. Your turns — a warm tinted note. A landmark for scanning, not something to
- *      re-read.
- *   3. Tool calls and thinking — faint, collapsed, in the rail's language.
+ *   1. Agent prose — full-contrast text on the left. The content.
+ *   2. Your turns — a warm tinted note on the right. A landmark for scanning, not
+ *      something to re-read.
+ *   3. Tool calls and thinking — faint, collapsed, on the agent's side.
  */
 export function Transcript({
   lane,
@@ -181,26 +185,33 @@ const TranscriptRow = memo(function TranscriptRow({
 })
 
 /**
- * A user turn: a warm note in the flow, not a bubble pinned to the right.
+ * A user turn: right-aligned, the way a conversation reads.
  *
- * Right-aligned bubbles are a messaging-app convention that costs the left half of
- * the row to say something the rail already says. Aligned left with everything
- * else, the conversation reads as one column of writing.
+ * Side carries authorship. Everything the agent produces — prose, tools, thinking,
+ * errors — hangs off the left rail; your turns sit opposite. That's the one cue
+ * that survives scrolling fast, and it's why chat threads have used it forever.
+ *
+ * `max-w-[78%]` deliberately crosses the centreline: bubbles capped at half the
+ * width leave a hard channel down the middle and make a long message a narrow
+ * ribbon. Overlapping keeps the alignment legible while letting either side use
+ * the room when it needs it.
  */
 function UserTurn({ text }: { text: string }) {
   return (
-    <Row
-      glyph={<PenLine size={15} className="text-accent/70" />}
-      className="mt-6 mb-2 first:mt-0"
-    >
+    <div className="mt-6 mb-2 flex justify-end gap-2 first:mt-0">
       <div
-        className="hand-1 max-w-[68ch] whitespace-pre-wrap bg-accent-wash px-3.5 py-2.5
+        className="hand-1 max-w-[78%] whitespace-pre-wrap bg-accent-wash px-3.5 py-2.5
                    text-[0.95rem] leading-relaxed text-text"
         data-selectable
       >
         {text}
       </div>
-    </Row>
+      {/* Mirrors the agent's rail on the far side, so the two turn types are
+          symmetric rather than one having a gutter and the other not. */}
+      <div className="flex w-5 shrink-0 justify-center pt-1.5 @[30rem]:w-7" aria-hidden>
+        <PenLine size={14} className="text-accent/60" />
+      </div>
+    </div>
   )
 }
 
@@ -238,7 +249,7 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
 
 function EmptyLane() {
   return (
-    <p className="py-10 text-center font-display text-base text-text-faint @[30rem]:py-16">
+    <p className="py-10 text-center text-sm text-text-faint @[30rem]:py-16">
       Nothing here yet — say something.
     </p>
   )

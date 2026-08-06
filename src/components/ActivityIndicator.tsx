@@ -77,7 +77,7 @@ export function ActivityIndicator({
       {compact ? <Mark state={markStateFor(status)} size={15} /> : null}
       {compact ? null : (
         <>
-          <span className="font-display">{label}…</span>
+          <span>{label}…</span>
           {/* Tabular figures so the width doesn't twitch as the count ticks. */}
           <span className="text-xs text-text-faint tabular-nums">{elapsed}s</span>
         </>
