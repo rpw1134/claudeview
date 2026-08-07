@@ -264,7 +264,56 @@ export type IpcCalls = {
    */
   'terminal:snapshot': [{ id: string }, { scrollback: string; seq: number }]
   'app:info': [void, { cwd: string; version: string; home: string }]
+
+  /**
+   * Claude Code config management (agents, skills, hooks) for a scope.
+   *
+   * `projectPath` is `~/.claude` for the global scope or a project directory;
+   * main resolves it through one validated helper, so the renderer can never
+   * name an arbitrary file — only agents/skills/hooks inside a config dir.
+   * File contents cross as raw strings; structure (frontmatter) is parsed on
+   * whichever side needs it via `shared/frontmatter.ts`.
+   */
+  'config:projects:list': [void, ConfigProject[]]
+  'config:agents:list': [{ projectPath: string }, string[]]
+  'config:agents:get': [{ projectPath: string; name: string }, string | null]
+  'config:agents:set': [{ projectPath: string; name: string; content: string }, void]
+  'config:agents:create': [
+    { projectPath: string; name: string; content: string },
+    { ok: boolean; error?: string },
+  ]
+  'config:agents:delete': [{ projectPath: string; name: string }, void]
+  'config:skills:list': [{ projectPath: string }, string[]]
+  'config:skills:create': [{ projectPath: string; name: string }, { ok: boolean; error?: string }]
+  'config:skills:delete': [{ projectPath: string; name: string }, void]
+  'config:skills:files': [{ projectPath: string; name: string }, SkillFiles]
+  /** `file` is relative to the skill dir, e.g. `SKILL.md` or `scripts/run.sh`. */
+  'config:skills:read': [{ projectPath: string; name: string; file: string }, string | null]
+  'config:skills:write': [
+    { projectPath: string; name: string; file: string; content: string },
+    void,
+  ]
+  'config:skills:delete-file': [{ projectPath: string; name: string; file: string }, void]
+  'config:hooks:get': [{ projectPath: string }, HooksConfig]
+  'config:hooks:set': [{ projectPath: string; hooks: HooksConfig }, void]
 }
+
+/**
+ * A config scope: `~/.claude` itself (global, shown as "Global") or a project
+ * directory whose config lives in `<path>/.claude`. Mirrors how the CLI scopes
+ * agents, skills, and settings.
+ */
+export type ConfigProject = { path: string; name: string }
+
+/** A skill directory's contents: markdown companions and `scripts/` entries. */
+export type SkillFiles = { files: string[]; scripts: string[] }
+
+/**
+ * The `hooks` key of settings.json. Kept deliberately loose — event names map to
+ * arrays of matcher groups whose shape the UI edits but never fully owns, so
+ * fields this app doesn't know about survive a round-trip.
+ */
+export type HooksConfig = Record<string, unknown[]>
 
 /** Channel for main -> renderer session stream pushes. */
 export const STREAM_CHANNEL = 'session:event' as const

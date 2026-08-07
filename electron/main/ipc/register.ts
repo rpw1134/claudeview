@@ -5,6 +5,7 @@ import os from 'node:os'
 import type { IpcCalls, SessionSummary } from '../../../shared/ipc'
 import type { SessionManager } from '../session/SessionManager'
 import type { TerminalManager } from '../terminal/TerminalManager'
+import * as config from '../config/ConfigStore'
 
 /**
  * Type-safe wrapper over `ipcMain.handle`.
@@ -134,6 +135,34 @@ export function registerIpc(
     version: app.getVersion(),
     home: os.homedir(),
   }))
+
+  // Config management. Thin delegation — validation and the scope rule live in
+  // ConfigStore, so a handler here is never more than a call.
+  handle('config:projects:list', () => config.listProjects())
+  handle('config:agents:list', ({ projectPath }) => config.listAgents(projectPath))
+  handle('config:agents:get', ({ projectPath, name }) => config.getAgent(projectPath, name))
+  handle('config:agents:set', ({ projectPath, name, content }) =>
+    config.setAgent(projectPath, name, content),
+  )
+  handle('config:agents:create', ({ projectPath, name, content }) =>
+    config.createAgent(projectPath, name, content),
+  )
+  handle('config:agents:delete', ({ projectPath, name }) => config.deleteAgent(projectPath, name))
+  handle('config:skills:list', ({ projectPath }) => config.listSkills(projectPath))
+  handle('config:skills:create', ({ projectPath, name }) => config.createSkill(projectPath, name))
+  handle('config:skills:delete', ({ projectPath, name }) => config.deleteSkill(projectPath, name))
+  handle('config:skills:files', ({ projectPath, name }) => config.skillFiles(projectPath, name))
+  handle('config:skills:read', ({ projectPath, name, file }) =>
+    config.readSkillFile(projectPath, name, file),
+  )
+  handle('config:skills:write', ({ projectPath, name, file, content }) =>
+    config.writeSkillFile(projectPath, name, file, content),
+  )
+  handle('config:skills:delete-file', ({ projectPath, name, file }) =>
+    config.deleteSkillFile(projectPath, name, file),
+  )
+  handle('config:hooks:get', ({ projectPath }) => config.getHooks(projectPath))
+  handle('config:hooks:set', ({ projectPath, hooks }) => config.setHooks(projectPath, hooks))
 }
 
 /** Remove every handler. Paired with `registerIpc` so a reload can't double-register. */
@@ -154,6 +183,21 @@ export function unregisterIpc(): void {
     'terminal:resize',
     'terminal:close',
     'terminal:snapshot',
+    'config:projects:list',
+    'config:agents:list',
+    'config:agents:get',
+    'config:agents:set',
+    'config:agents:create',
+    'config:agents:delete',
+    'config:skills:list',
+    'config:skills:create',
+    'config:skills:delete',
+    'config:skills:files',
+    'config:skills:read',
+    'config:skills:write',
+    'config:skills:delete-file',
+    'config:hooks:get',
+    'config:hooks:set',
   ]
   for (const channel of channels) ipcMain.removeHandler(channel)
 }
