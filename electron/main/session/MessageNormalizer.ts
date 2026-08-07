@@ -14,10 +14,11 @@ import { MAIN_AGENT } from '../../../shared/ipc'
  *    `"<messageId>#<index>"`.
  *
  *  - **Delta/full-message de-duplication.** With `includePartialMessages` the text
- *    arrives twice: once as deltas, then again inside the complete `assistant`
- *    message. We remember which blocks streamed and emit the full text only as a
- *    fallback for blocks that didn't — so the UI is correct whether or not partial
- *    events are enabled, without ever double-rendering.
+ *    arrives twice: once as deltas, then again inside a complete `assistant`
+ *    message. We remember which content *types* streamed per message and emit the
+ *    full text only as a fallback for content that didn't — so the UI is correct
+ *    whether or not partial events are enabled, without ever double-rendering.
+ *    (See `streamedContent` for why the match can't be by block id.)
  *
  *  - **Subagent lanes.** A subagent's messages carry `parent_tool_use_id`, which
  *    equals the `tool_use.id` of the Task call that spawned it. That id becomes the
@@ -26,8 +27,21 @@ import { MAIN_AGENT } from '../../../shared/ipc'
 export class MessageNormalizer {
   /** Current `message.id` per lane, for minting block ids. */
   private readonly currentMessageId = new Map<string, string>()
-  /** Block ids that received at least one streaming delta. */
-  private readonly streamedBlocks = new Set<string>()
+  /**
+   * `"<messageId>:text"` / `"<messageId>:thinking"` for every message that
+   * streamed at least one delta of that type.
+   *
+   * Deliberately keyed per message+type, NOT per block id. The CLI re-emits each
+   * completed content block as its **own** `assistant` message whose content
+   * array has one entry — so the complete block's index is always 0, while its
+   * deltas streamed under the API's real block index. An id-based comparison
+   * ("msg#0" vs "msg#1") therefore never matches, the backfill fired for text
+   * that had already streamed, and every response rendered twice — appended,
+   * for extra confusion, under whatever block actually owned index 0 (usually
+   * the thinking block). Per-type matching sidesteps indices entirely: if any
+   * text streamed for this message, its complete text blocks are echoes.
+   */
+  private readonly streamedContent = new Set<string>()
   /** Lanes we've already announced via `agent-start`. */
   private readonly openAgents = new Map<string, AgentRef>()
   /** tool_use ids whose tool is a subagent spawn, so `tool-end` can close the lane. */
@@ -212,12 +226,12 @@ export class MessageNormalizer {
         if (!delta) return events
 
         if (delta.type === 'text_delta' && delta.text) {
-          this.streamedBlocks.add(blockId)
+          this.streamedContent.add(`${this.messageBase(agent.id)}:text`)
           events.push({ kind: 'text-delta', blockId, text: delta.text, agent })
           // Deltas mean the model is producing visible output, not still thinking.
           events.push({ kind: 'status', status: 'streaming' })
         } else if (delta.type === 'thinking_delta' && delta.thinking) {
-          this.streamedBlocks.add(blockId)
+          this.streamedContent.add(`${this.messageBase(agent.id)}:thinking`)
           events.push({ kind: 'thinking-delta', blockId, text: delta.thinking, agent })
           events.push({ kind: 'status', status: 'thinking' })
         }
@@ -254,8 +268,6 @@ export class MessageNormalizer {
     if (!Array.isArray(content)) return events
 
     content.forEach((block, index) => {
-      const blockId = `${messageId ?? message.uuid}#${index}`
-
       if (block.type === 'tool_use') {
         if (MessageNormalizer.AGENT_TOOLS.has(block.name)) {
           this.agentToolUseIds.add(block.id)
@@ -271,14 +283,28 @@ export class MessageNormalizer {
         return
       }
 
-      // Fallback path: only fires when this block never streamed (partial events
-      // disabled, or a delta was missed). Prevents both loss and duplication.
-      if (this.streamedBlocks.has(blockId)) return
+      /*
+       * Backfill: only for content that never streamed — partial events disabled,
+       * replayed history, or (the common live case) summarized thinking, which
+       * arrives complete without ever producing deltas. Matching is per
+       * message+type, never by block index; see `streamedContent`.
+       *
+       * The backfill id carries a `b` marker so it can never collide with a
+       * stream-minted id: this complete message's index is its position in a
+       * one-entry array, not the API's block index, and "msg#0" may already be
+       * someone else's block.
+       */
+      const base = messageId ?? message.uuid
+      // Type-qualified as well as indexed: two split-out complete blocks of the
+      // same message both sit at index 0, and must not share a buffer.
+      const blockId = `${base}#b-${block.type}-${index}`
 
       if (block.type === 'text' && block.text) {
+        if (this.streamedContent.has(`${base}:text`)) return
         events.push({ kind: 'text-delta', blockId, text: block.text, agent })
         events.push({ kind: 'block-end', blockId, agent })
       } else if (block.type === 'thinking' && block.thinking) {
+        if (this.streamedContent.has(`${base}:thinking`)) return
         events.push({ kind: 'thinking-delta', blockId, text: block.thinking, agent })
         events.push({ kind: 'block-end', blockId, agent })
       }
@@ -332,7 +358,7 @@ export class MessageNormalizer {
     // Reset per-turn state so the next turn starts clean. The lane maps are
     // intentionally NOT cleared here — a background subagent can outlive a turn.
     this.currentMessageId.clear()
-    this.streamedBlocks.clear()
+    this.streamedContent.clear()
 
     const ok = message.subtype === 'success' && !message.is_error
     // `usage` mixes plain counts with nested objects (e.g. `cache_creation`), so
@@ -360,7 +386,12 @@ export class MessageNormalizer {
   }
 
   private blockId(laneId: string, index: number | undefined): string {
-    return `${this.currentMessageId.get(laneId) ?? laneId}#${index ?? 0}`
+    return `${this.messageBase(laneId)}#${index ?? 0}`
+  }
+
+  /** The id that groups a lane's current message — shared by block ids and dedup keys. */
+  private messageBase(laneId: string): string {
+    return this.currentMessageId.get(laneId) ?? laneId
   }
 
   /** Bound tool-result text before it crosses IPC. */

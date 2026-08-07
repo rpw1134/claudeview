@@ -11,6 +11,7 @@ import './attachmentChips.test'
 import './errorRow.test'
 import './elapsed.test'
 import './frontmatter.test'
+import './normalizer.test'
 import { report } from './harness'
 
 report()
