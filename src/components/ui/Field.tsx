@@ -72,6 +72,54 @@ export function Slider({
 }
 
 /**
+ * Segmented control: a small set of mutually exclusive options, all visible.
+ *
+ * The right control when there are two or three choices — a dropdown hides the
+ * alternatives behind a click and brings the OS's own chrome with it, which is
+ * exactly the kind of default furniture the rest of this UI avoids. Buttons
+ * carry `aria-pressed` (a group of toggles, one on at a time) rather than radio
+ * semantics, which would promise arrow-key behaviour a row of buttons doesn't have.
+ */
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+  'aria-label': ariaLabel,
+}: {
+  value: T
+  onChange: (value: T) => void
+  options: { value: T; label: string }[]
+  className?: string
+  'aria-label': string
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={cn('hand-sm-2 flex shrink-0 items-stretch gap-0.5 bg-surface p-1', className)}
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'hand-sm-1 flex-1 whitespace-nowrap px-3 text-sm transition-colors',
+            value === option.value
+              ? 'bg-accent-wash text-text'
+              : 'text-text-muted hover:bg-raised hover:text-text',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
  * Native select, styled to match. A control boundary that has to be perceivable,
  * so it carries a real border — but nothing around it does.
  */

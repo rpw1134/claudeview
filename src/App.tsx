@@ -187,6 +187,7 @@ export function App() {
             home={home}
             onStart={(options) => void addPanel('session', options)}
             onStartTerminal={(cwd) => void addPanel('terminal', { cwd })}
+            onOpenConfig={toggleConfig}
           />
         ) : (
           <PanelMosaic

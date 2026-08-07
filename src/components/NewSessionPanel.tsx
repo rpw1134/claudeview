@@ -1,15 +1,32 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, FolderOpen, Loader2, Search, SquareTerminal, X } from 'lucide-react'
+import {
+  ChevronRight,
+  FolderOpen,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  SquareTerminal,
+  X,
+} from 'lucide-react'
 import type { SessionSummary } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { Mark, Wordmark } from './Mark'
 import { SketchRule } from './Sketch'
 import { Button } from './ui/Button'
-import { Select } from './ui/Field'
+import { Segmented } from './ui/Field'
 import { cn, shortenPath, timeAgo } from '@/lib/utils'
 
 /**
- * Landing screen: pick a directory, then start something in it.
+ * Landing screen: pick a directory, then start something in it — or step
+ * sideways into Claude config.
+ *
+ * ## Two destinations, one page
+ *
+ * Everything in the body is about *sessions* and is scoped by the directory
+ * control. Config is a different surface entirely (it has its own scope picker),
+ * so its entry point sits apart in the top corner as a quiet ghost action —
+ * discoverable on the first visit, invisible to the eye that came here to start
+ * a session. Same toggle as Opt+K and the toolbar button.
  *
  * ## Why it isn't a centred card any more
  *
@@ -35,10 +52,12 @@ export function NewSessionPanel({
   home,
   onStart,
   onStartTerminal,
+  onOpenConfig,
 }: {
   home?: string
   onStart: (options: { cwd?: string; resume?: string; title?: string }) => void
   onStartTerminal: (cwd?: string) => void
+  onOpenConfig: () => void
 }) {
   const [cwd, setCwd] = useState<string | undefined>(undefined)
   const [scope, setScope] = useState<'all' | 'cwd'>('all')
@@ -81,11 +100,25 @@ export function NewSessionPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl px-10 py-12 lg:py-16">
-        <Wordmark />
-        <p className="mt-3 max-w-[58ch] text-sm leading-relaxed text-text-muted">
-          Sessions and terminals, side by side. Drag a panel by its header to move it,
-          drag a divider to resize.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Wordmark />
+            <p className="mt-3 max-w-[58ch] text-sm leading-relaxed text-text-muted">
+              Sessions and terminals, side by side. Drag a panel by its header to move it,
+              drag a divider to resize.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={onOpenConfig}
+            title="Agents, skills, and hooks — ⌥K"
+            className="shrink-0"
+          >
+            <SlidersHorizontal size={14} />
+            Claude config
+          </Button>
+        </div>
 
         {/*
           The directory comes first because it scopes everything under it — the new
@@ -131,7 +164,7 @@ export function NewSessionPanel({
         </div>
 
         <p className="mt-3 text-xs text-text-faint">
-          ⌘T new session · ⇧⌘T new terminal · ⌥Tab switch panels
+          ⌥T new session · ⌥C new terminal · ⌥A / ⌥S split · ⌥Tab switch · ⌥K config
         </p>
 
         <section className="mt-14">
@@ -168,14 +201,17 @@ export function NewSessionPanel({
                 </button>
               ) : null}
             </div>
-            <Select
+            {/* Two visible options, not a dropdown: with the alternatives always
+                on screen the current scope never needs decoding, and there's no
+                native menu chrome interrupting the page's own material. */}
+            <Segmented
               value={scope}
-              onChange={(value) => setScope(value as 'all' | 'cwd')}
+              onChange={setScope}
               options={[
                 { value: 'all', label: 'All projects' },
                 { value: 'cwd', label: 'This directory' },
               ]}
-              className="h-11 w-40 shrink-0 text-sm"
+              className="h-11"
               aria-label="Scope sessions"
             />
           </div>
