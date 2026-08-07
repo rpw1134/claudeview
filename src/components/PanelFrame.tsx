@@ -1,10 +1,9 @@
 import { memo } from 'react'
-import { MessagesSquare, SlidersHorizontal, SquareTerminal, X } from 'lucide-react'
+import { MessagesSquare, SquareTerminal, X } from 'lucide-react'
 import type { Panel } from '@/stores/workspaceStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
-import { ConfigPanel } from './config/ConfigPanel'
 import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
 import { Button } from './ui/Button'
 import { cn, compactTokens, shortenPath } from '@/lib/utils'
@@ -52,12 +51,7 @@ export const PanelFrame = memo(function PanelFrame({
   )
 
   const title = tab?.title ?? panel.title
-  const Icon =
-    panel.kind === 'terminal'
-      ? SquareTerminal
-      : panel.kind === 'config'
-        ? SlidersHorizontal
-        : MessagesSquare
+  const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
   const isBusy = tab ? isBusyStatus(tab.status) : false
 
   // Model and token totals used to live in a window-level status strip. They're
@@ -138,8 +132,6 @@ export const PanelFrame = memo(function PanelFrame({
             focused={focused}
             onFocus={onFocus}
           />
-        ) : panel.kind === 'config' ? (
-          <ConfigPanel />
         ) : (
           <SessionPanel
             tabId={panel.refId}

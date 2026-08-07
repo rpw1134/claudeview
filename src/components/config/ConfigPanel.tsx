@@ -10,13 +10,14 @@ import { SkillEditor } from './SkillEditor'
 import { HooksEditor } from './HooksEditor'
 
 /**
- * The Claude Code configuration panel: agents, skills, and hooks for a chosen
+ * The Claude Code configuration view: agents, skills, and hooks for a chosen
  * scope (global `~/.claude`, or any project the CLI knows about).
  *
- * Navigation is list -> editor with a back affordance rather than list-beside-
- * editor, because this lives in the panel mosaic: at an eighth of the window
- * there is no room for two columns, and the pattern has to hold at every size a
- * panel can be dragged to.
+ * This fills the window as its own surface — deliberately separate from the
+ * session/terminal workspace, which keeps running (hidden, still mounted)
+ * while you're here. Opt+K or the toolbar button switches either way.
+ * Navigation is list -> editor with a back affordance, which also holds up if
+ * this ever gets embedded somewhere narrower.
  */
 
 type Section = 'agents' | 'skills' | 'hooks'
@@ -51,8 +52,11 @@ export function ConfigPanel() {
   if (!scope) return null
 
   return (
+    // Full-window surface, so the content sits in a centered column: config is
+    // forms and prose, and edge-to-edge fields on a wide window read as a sheet
+    // of inputs rather than a page.
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+      <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <nav className="flex items-center gap-0.5" aria-label="Config sections">
           {SECTIONS.map((entry) => (
             <button
@@ -87,6 +91,7 @@ export function ConfigPanel() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl">
         {section === 'hooks' ? (
           <HooksEditor projectPath={scope} />
         ) : open !== null ? (
@@ -98,6 +103,7 @@ export function ConfigPanel() {
         ) : (
           <ResourceList key={`${scope}:${section}`} projectPath={scope} kind={section} onOpen={setOpen} />
         )}
+        </div>
       </div>
     </div>
   )

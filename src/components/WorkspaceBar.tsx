@@ -43,16 +43,18 @@ import { Button } from './ui/Button'
  */
 export function WorkspaceBar({
   panelCount,
+  configActive,
   onAddSession,
   onAddTerminal,
-  onAddConfig,
+  onToggleConfig,
   onBalance,
   onOpenSettings,
 }: {
   panelCount: number
+  configActive: boolean
   onAddSession: (direction: SplitDirection) => void
   onAddTerminal: (direction: SplitDirection) => void
-  onAddConfig: () => void
+  onToggleConfig: () => void
   onBalance: () => void
   onOpenSettings: () => void
 }) {
@@ -85,13 +87,16 @@ export function WorkspaceBar({
       >
         <SquareTerminal size={15} />
       </Button>
+      {/* A toggle, not an add: config swaps the whole surface below and this
+          button is also the way back, mirroring the Opt+K command. */}
       <Button
         variant="ghost"
         size="icon"
-        onClick={onAddConfig}
-        disabled={atCapacity}
-        aria-label="New Claude config panel"
+        onClick={onToggleConfig}
+        aria-label={configActive ? 'Back to workspace' : 'Claude config'}
+        aria-pressed={configActive}
         title="Claude config — ⌥K"
+        className={configActive ? 'bg-accent-wash text-accent' : undefined}
       >
         <SlidersHorizontal size={15} />
       </Button>

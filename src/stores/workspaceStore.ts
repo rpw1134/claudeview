@@ -28,7 +28,7 @@ import {
  * which is the whole point of moving a panel rather than recreating it.
  */
 
-export type PanelKind = 'session' | 'terminal' | 'config'
+export type PanelKind = 'session' | 'terminal'
 
 export type Panel = {
   id: string
@@ -113,9 +113,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       id: panelId,
       kind,
       refId,
-      title:
-        options.title ??
-        (kind === 'terminal' ? 'Terminal' : kind === 'config' ? 'Claude config' : 'New session'),
+      title: options.title ?? (kind === 'terminal' ? 'Terminal' : 'New session'),
       cwd: options.cwd,
     }
 
@@ -166,10 +164,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
 
     if (panel.kind === 'session') {
       await useSessionStore.getState().closeTab(panel.refId)
-    } else if (panel.kind === 'terminal') {
+    } else {
       await api['terminal:close']({ id: panel.refId })
     }
-    // Config panels hold no process; there is nothing to dispose.
   },
 
   renamePanel: (panelId, title) =>
