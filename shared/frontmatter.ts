@@ -1,4 +1,4 @@
-import yaml from 'js-yaml'
+import { load as yamlLoad, dump as yamlDump } from 'js-yaml'
 
 /**
  * YAML frontmatter for agent files and SKILL.md files.
@@ -58,7 +58,7 @@ function parse<T extends Record<string, unknown>>(content: string): Parsed<T> {
   if (!match) return { frontmatter: {} as T, body: content }
 
   try {
-    const data = yaml.load(match[1]!)
+    const data = yamlLoad(match[1]!)
     if (typeof data !== 'object' || data === null || Array.isArray(data)) {
       return { frontmatter: {} as T, body: content }
     }
@@ -101,6 +101,6 @@ export function serializeFrontmatter(
     return a.localeCompare(b)
   })
 
-  const dumped = yaml.dump(Object.fromEntries(entries), { lineWidth: -1 })
+  const dumped = yamlDump(Object.fromEntries(entries), { lineWidth: -1 })
   return `---\n${dumped}---\n\n${body.replace(/^\n+/, '')}`
 }

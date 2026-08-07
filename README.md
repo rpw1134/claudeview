@@ -79,6 +79,7 @@ npm run dev
 | `Esc`          | Stop the current turn      |
 | `⌘T` / `⌥T`    | New session (thread) panel |
 | `⇧⌘T` / `⌥C`   | New terminal (console) panel |
+| `⌥K`           | New Claude config panel (agents, skills, hooks) |
 | `⌥A`           | Split vertically (new panel right, same kind as focused) |
 | `⌥S`           | Split horizontally (new panel below, same kind as focused) |
 | `⌘W` / `Ctrl+W`| Close the focused panel    |

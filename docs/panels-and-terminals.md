@@ -342,6 +342,7 @@ pgrep -fl "zsh|bash" | grep -v login
 | --- | --- |
 | `⌘T` / `⌥T` | New session (thread) panel |
 | `⇧⌘T` / `⌥C` | New terminal (console) panel |
+| `⌥K` | New Claude config panel (agents, skills, hooks) |
 | `⌥A` | Split focused panel vertically (new panel to the right, same kind) |
 | `⌥S` | Split focused panel horizontally (new panel below, same kind) |
 | `⌘W` | Close focused panel |

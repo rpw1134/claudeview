@@ -4,6 +4,7 @@ import {
   MessageSquarePlus,
   Rows2,
   Settings2,
+  SlidersHorizontal,
   SquareTerminal,
 } from 'lucide-react'
 import { MAX_PANELS } from '@/stores/workspaceStore'
@@ -44,12 +45,14 @@ export function WorkspaceBar({
   panelCount,
   onAddSession,
   onAddTerminal,
+  onAddConfig,
   onBalance,
   onOpenSettings,
 }: {
   panelCount: number
   onAddSession: (direction: SplitDirection) => void
   onAddTerminal: (direction: SplitDirection) => void
+  onAddConfig: () => void
   onBalance: () => void
   onOpenSettings: () => void
 }) {
@@ -81,6 +84,16 @@ export function WorkspaceBar({
         title="New terminal — ⇧⌘T / ⌥C"
       >
         <SquareTerminal size={15} />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onAddConfig}
+        disabled={atCapacity}
+        aria-label="New Claude config panel"
+        title="Claude config — ⌥K"
+      >
+        <SlidersHorizontal size={15} />
       </Button>
 
       <Divider />

@@ -69,6 +69,7 @@ export function App() {
         const command: Record<string, (() => void) | undefined> = {
           KeyT: () => void addPanel('session'),
           KeyC: () => void addPanel('terminal'),
+          KeyK: () => void addPanel('config'),
           KeyA: () => void addPanel(focusedKind, { direction: 'row' }),
           KeyS: () => void addPanel(focusedKind, { direction: 'column' }),
         }
@@ -140,6 +141,7 @@ export function App() {
         panelCount={panels.length}
         onAddSession={(direction) => void addPanel('session', { direction })}
         onAddTerminal={(direction) => void addPanel('terminal', { direction })}
+        onAddConfig={() => void addPanel('config')}
         onBalance={balanceLayout}
         onOpenSettings={() => setSettingsOpen(true)}
       />

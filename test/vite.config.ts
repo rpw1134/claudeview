@@ -10,7 +10,12 @@ import path from 'node:path'
  */
 export default defineConfig({
   root: path.resolve(__dirname, '..'),
-  resolve: { alias: { '@': path.resolve(__dirname, '../src') } },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '../src'),
+      '@shared': path.resolve(__dirname, '../shared'),
+    },
+  },
   build: {
     ssr: true,
     outDir: path.resolve(__dirname, '../.test-dist'),
