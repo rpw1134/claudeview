@@ -68,7 +68,7 @@ export function WorkspaceBar({
         onClick={() => onAddSession('row')}
         disabled={atCapacity}
         aria-label="New session panel"
-        title="New session — ⌘T"
+        title="New session — ⌘T / ⌥T"
       >
         <MessageSquarePlus size={15} />
       </Button>
@@ -78,7 +78,7 @@ export function WorkspaceBar({
         onClick={() => onAddTerminal('row')}
         disabled={atCapacity}
         aria-label="New terminal panel"
-        title="New terminal — ⇧⌘T"
+        title="New terminal — ⇧⌘T / ⌥C"
       >
         <SquareTerminal size={15} />
       </Button>
@@ -93,7 +93,7 @@ export function WorkspaceBar({
         onClick={() => onAddSession('row')}
         disabled={atCapacity}
         aria-label="Add panel to the right"
-        title="Split right"
+        title="Split right — ⌥A"
       >
         <Columns2 size={15} />
       </Button>
@@ -103,7 +103,7 @@ export function WorkspaceBar({
         onClick={() => onAddSession('column')}
         disabled={atCapacity}
         aria-label="Add panel below"
-        title="Split down"
+        title="Split down — ⌥S"
       >
         <Rows2 size={15} />
       </Button>

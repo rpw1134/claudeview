@@ -264,7 +264,8 @@ contrast while the rest stay muted.
 | --- | --- |
 | Click a panel | Focus it |
 | `Alt+Tab` / `Ctrl+Tab` | Next panel (add `Shift` for previous) |
-| `⌘1`–`⌘9` | Focus by position |
+| `⌥1`–`⌥8` | Focus by visual position (left-to-right, top-to-bottom) |
+| `⌘1`–`⌘9` | Focus by creation order |
 
 **Keyboard focus moves the caret into the panel's input; pointer focus does not.**
 Clicking into a transcript to select text would otherwise yank the caret away
@@ -339,10 +340,13 @@ pgrep -fl "zsh|bash" | grep -v login
 
 | Shortcut | Action |
 | --- | --- |
-| `⌘T` | New session panel |
-| `⇧⌘T` | New terminal panel |
+| `⌘T` / `⌥T` | New session (thread) panel |
+| `⇧⌘T` / `⌥C` | New terminal (console) panel |
+| `⌥A` | Split focused panel vertically (new panel to the right, same kind) |
+| `⌥S` | Split focused panel horizontally (new panel below, same kind) |
 | `⌘W` | Close focused panel |
-| `⌘1`–`⌘9` | Focus panel by position |
+| `⌥1`–`⌥8` | Focus panel by visual position |
+| `⌘1`–`⌘9` | Focus panel by creation order |
 | `Alt+Tab` / `Ctrl+Tab` | Cycle panels (`Shift` reverses) |
 | `Enter` | Send (in a session composer) |
 | `Esc` | Interrupt the focused session's turn |
