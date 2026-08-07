@@ -3,7 +3,7 @@ import { Dialog, DialogContent } from './ui/Dialog'
 import { Field, Select, Slider } from './ui/Field'
 import { Button } from './ui/Button'
 import { useAppearanceStore } from '@/stores/appearanceStore'
-import { COLORWAYS, FONT_STACKS, type FontId } from '@/lib/theme'
+import { COLORWAYS, FONT_STACKS, MEASURE_FULL, type FontId } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 /**
@@ -106,14 +106,18 @@ export function SettingsDialog({
           </Field>
 
           <Field
-            label={`Line width — ${appearance.measure} characters`}
-            hint="45–75 characters per line is the readable range; 66 is the classic optimum."
+            label={
+              appearance.measure >= MEASURE_FULL
+                ? 'Line width — full width'
+                : `Line width — ${appearance.measure} characters`
+            }
+            hint="Responses fill the panel by default. Drag left to cap line length; 45–75 characters is the classic readable range."
           >
             <Slider
               ariaLabel="Line width"
               value={appearance.measure}
               min={52}
-              max={100}
+              max={MEASURE_FULL}
               step={2}
               onChange={(value) => appearance.set('measure', value)}
             />

@@ -2,7 +2,6 @@ import { memo, useState } from 'react'
 import {
   ChevronRight,
   CircleAlert,
-  CircleCheck,
   FileText,
   Globe,
   Loader2,
@@ -44,6 +43,15 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
  * So: no border, no fill at rest. It's a quiet row that gains a fill on hover and
  * only becomes a real surface once expanded. The expanded body is separated by a
  * hairline rule rather than by nesting a second bordered box inside the first.
+ *
+ * ## Success is silent
+ *
+ * Every row used to carry a status glyph, which meant a column of identical ticks
+ * down the right edge of the transcript — one mark per call, all saying the same
+ * thing, none of them worth reading. Success is now the *absence* of a signal:
+ * assume it worked. Only a failure marks itself, and it does so with the whole row
+ * (tinted fill, danger-coloured name) rather than a 13px icon at the far margin,
+ * because a failure is something you want to spot while scrolling past.
  */
 export const ToolCallCard = memo(function ToolCallCard({
   item,
@@ -59,11 +67,14 @@ export const ToolCallCard = memo(function ToolCallCard({
   return (
     <div
       className={cn(
-        '-mx-3 my-1 overflow-hidden rounded-lg transition-colors duration-150',
+        'hand-sm-2 my-0.5 overflow-hidden transition-colors duration-150',
         expanded ? 'bg-surface' : 'hover:bg-surface',
+        // A failed call is worth finding while scrolling, and a 13px icon at the
+        // right margin isn't findable. Tinting the row is.
+        item.status === 'error' && 'bg-danger/10 hover:bg-danger/15',
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-2 py-1.5">
         <button
           onClick={() => setExpanded((value) => !value)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -76,14 +87,35 @@ export const ToolCallCard = memo(function ToolCallCard({
               expanded && 'rotate-90',
             )}
           />
-          <Icon size={14} className="shrink-0 text-text-faint" />
-          <span className="shrink-0 font-mono text-xs text-text-muted">{item.name}</span>
+          <Icon
+            size={14}
+            className={cn('shrink-0', item.status === 'error' ? 'text-danger' : 'text-text-faint')}
+          />
+          <span
+            className={cn(
+              'shrink-0 font-mono text-xs',
+              item.status === 'error' ? 'text-danger' : 'text-text-muted',
+            )}
+          >
+            {item.name}
+          </span>
           {summary ? (
             <span className="truncate font-mono text-xs text-text-faint">{summary}</span>
           ) : null}
         </button>
 
-        <StatusGlyph status={item.status} />
+        {/*
+          Only *exceptions* get a glyph. Success is the overwhelming majority of
+          tool calls, so a tick on every row was a column of identical marks down
+          the right-hand side carrying no information — the eye has to check each
+          one to discover they all say the same thing. Silence means it worked;
+          the row's own name colour turns red when it didn't.
+        */}
+        {item.status === 'running' ? (
+          <Loader2 size={13} className="shrink-0 animate-spin text-accent" aria-label="Running" />
+        ) : item.status === 'error' ? (
+          <CircleAlert size={13} className="shrink-0 text-danger" aria-label="Failed" />
+        ) : null}
 
         {item.spawnedLaneId && onOpenLane ? (
           <Button size="sm" variant="subtle" onClick={() => onOpenLane(item.spawnedLaneId!)}>
@@ -93,7 +125,7 @@ export const ToolCallCard = memo(function ToolCallCard({
       </div>
 
       {expanded ? (
-        <div className="border-t border-line px-3 py-3" data-selectable>
+        <div className="border-t border-line px-2 py-3" data-selectable>
           <Section label="Input">
             <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-text-muted">
               {formatValue(item.input)}
@@ -129,17 +161,6 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function StatusGlyph({ status }: { status: ToolItem['status'] }) {
-  if (status === 'running') {
-    return <Loader2 size={14} className="shrink-0 animate-spin text-accent" aria-label="Running" />
-  }
-  if (status === 'error') {
-    return <CircleAlert size={14} className="shrink-0 text-danger" aria-label="Failed" />
-  }
-  // Success is the common case, so it stays faint — a green tick on every row
-  // would be a page full of "look here" with nothing to look at.
-  return <CircleCheck size={14} className="shrink-0 text-text-faint" aria-label="Succeeded" />
-}
 
 /** Pull the most identifying argument out of a tool input for the collapsed row. */
 function summarizeInput(input: unknown): string {

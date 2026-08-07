@@ -5,17 +5,40 @@ panel is either a Claude **session** or a **terminal**, and each session panel o
 its own composer.
 
 ```
-┌─ WorkspaceBar ──── add panel · split direction · tidy · settings ──┐
-├──────────────────────────┬─────────────────────────────────────────┤
-│ ▪ title  ⠿ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
-│   transcript             │   xterm + PTY         this panel is     │
-│   ─────────────────────  │                       focused           │
-│   [auto] 📎 message…  ↑  │   (keystrokes go straight to the shell) │
+                                   ⊞ ⊟ │ ◫ ⊟ ⊞ │ ⚙   ← toolbar: no fill, flush right
+┌──────────────────────────┬─────────────────────────────────────────┐
+│ ▪ title  ✳ 12s  · tokens │ ▪ title · cwd     ▪ = accent icon means │
+│   transcript, full width │   xterm + PTY         this panel is     │
+│                          │                       focused           │
+│   message…               │   (keystrokes go straight to the shell) │
+│              [auto] 📎 ↑ │                                         │
 └──────────────────────────┴─────────────────────────────────────────┘
 ```
 
-Nothing sits at the bottom of the *window*. Input and status live inside the panels
-that own them.
+Nothing sits at the bottom of the *window*, and the toolbar has no fill — input and
+status live inside the panels that own them, and the panel header is the only
+labelled band on screen.
+
+## Why the toolbar is flush right
+
+Its controls used to start on the left, which on macOS means starting **after the
+traffic lights** — 84px in, while panel content below begins at 48px (the mosaic's
+8px padding plus a panel's 40px gutter). No tuning fixes that: the OS owns the
+top-left corner and nothing can share it.
+
+So nothing tries. The left is empty drag region, the controls sit against the right
+edge on the same vertical line as the content beneath them (measured: last control,
+prose and composer all end at x=1232), and there's no left-aligned chrome left to
+be misaligned.
+
+Dropping the toolbar's fill mattered as much. Two stacked filled bands — toolbar,
+then panel header — put two claims on the same piece of hierarchy before any content
+appeared. Without it there is one labelled strip, and the toolbar reads as floating
+controls rather than a second title bar.
+
+The icons are all one size, matching the split controls. Text labels there competed
+with panel titles directly below them at similar weight, for actions that have
+shortcuts the home screen teaches on first run.
 
 ## The layout is a split tree
 
@@ -56,7 +79,7 @@ demand — which is exactly why the error path is worth pinning down rather than
 finding out about in the moment. Those components are rendered directly instead.
 
 ```
-55 passed, 0 failed
+62 passed, 0 failed
 ```
 
 ## Rearranging
@@ -121,17 +144,29 @@ a given composer has. So the gutters are `@container` queries against the **pane
 
 | Panel width | Gutter |
 | --- | --- |
-| < 30rem | 12px |
-| 30–48rem | 20px |
-| ≥ 48rem | 32px |
+| < 30rem | 16px |
+| 30–48rem | 28px |
+| ≥ 48rem | 40px |
 
-The transcript uses the same three values, and both cap at the same
-`measure + 8rem` box — so the composer shell lines up under the prose at every
-density, and its right edge lines up with the user bubbles and tool rows above it.
+The transcript, lane tabs and reconnect row use the same three values, and the
+toolbar's right gutter is the widest of them plus the mosaic's own 8px padding — so
+its last control lands on the same vertical line as the content below it.
 
-**The nesting order is load-bearing.** Padding applied *outside* the width cap
-offsets the composer from the prose by exactly the gutter width. Measured before the
-fix: prose at x=268, composer shell at x=236. Cap first, gutter inside.
+Nothing is width-capped any more. `--measure` defaults to `none`, and Settings ▸
+Line width reins prose back in if you want it; the top of that slider is "full
+width".
+
+### Controls on one side
+
+The composer is two rows: the message across the full width, then every control on
+the right — permission mode, attach, send. They used to be interleaved with the
+text, so the input started a third of the way across and the eye stepped over two
+widgets to reach the thing it was there to use.
+
+Permission mode is a real menu rather than a native `<select>`, because "Bypass" and
+"Don't ask" mean nothing until something says what they permit. Each option carries a
+one-line description, and picking either of the two that let the agent act without
+prompting turns the chip warning-coloured with a shield.
 
 ## Attachments
 
@@ -161,7 +196,7 @@ relaunch.
 ## Activity
 
 The moment you press Enter, three things happen in the same frame: your message
-appears, the composer switches to "Queue a follow-up…", and the indicator starts —
+appears, the composer switches to "Add to the pile…", and the indicator starts —
 **13ms**, measured. None of it waits for the model, or even for the main process.
 
 The labelled indicator sits at the **tail of the transcript**, where your eye
@@ -171,9 +206,12 @@ doing it:
 
 | Phase | Glyph |
 | --- | --- |
-| Thinking / starting | a slow breathing dot |
-| Writing | a left-to-right wave |
-| Running a tool | a rotating arc |
+| Thinking / starting | the mark breathes |
+| Writing | its arms ripple outward in sequence |
+| Running a tool | it rotates |
+
+Elapsed time reads `12s` below a minute and `1m 05s` above it — `90s` is arithmetic
+the reader has to do.
 
 A long turn is indistinguishable from a hung one if nothing moves, which is why the
 terminal client shows a spinner and a clock. Shape and motion carry the phase, not
@@ -183,6 +221,22 @@ drop the word and the clock.
 All three animate `transform` and `opacity` only, so they stay on the compositor and
 never trigger layout — they run continuously, in up to eight panels, beside a
 transcript already being repainted every frame.
+
+### Drafts belong to the session
+
+The composer's unsent text lives on the **tab**, not in the component. A composer
+unmounts whenever the layout tree changes shape — opening a panel wraps its sibling
+in a new split, remounting that subtree — and component state took a half-written
+message down with it. Losing what someone typed is a data-loss bug however small the
+component holding it.
+
+### Success is silent
+
+Tool rows only mark *failures*. A tick on every successful call produced a column of
+identical glyphs down the right edge, each one needing a look to discover it said
+nothing. A failure tints the whole row and turns its name red, because that's
+something you want to catch while scrolling past — a 13px icon at the far margin
+isn't.
 
 ### Failures
 
@@ -210,7 +264,8 @@ contrast while the rest stay muted.
 | --- | --- |
 | Click a panel | Focus it |
 | `Alt+Tab` / `Ctrl+Tab` | Next panel (add `Shift` for previous) |
-| `⌘1`–`⌘9` | Focus by position |
+| `⌥1`–`⌥8` | Focus by visual position (left-to-right, top-to-bottom) |
+| `⌘1`–`⌘9` | Focus by creation order |
 
 **Keyboard focus moves the caret into the panel's input; pointer focus does not.**
 Clicking into a transcript to select text would otherwise yank the caret away
@@ -285,10 +340,13 @@ pgrep -fl "zsh|bash" | grep -v login
 
 | Shortcut | Action |
 | --- | --- |
-| `⌘T` | New session panel |
-| `⇧⌘T` | New terminal panel |
+| `⌘T` / `⌥T` | New session (thread) panel |
+| `⇧⌘T` / `⌥C` | New terminal (console) panel |
+| `⌥A` | Split focused panel vertically (new panel to the right, same kind) |
+| `⌥S` | Split focused panel horizontally (new panel below, same kind) |
 | `⌘W` | Close focused panel |
-| `⌘1`–`⌘9` | Focus panel by position |
+| `⌥1`–`⌥8` | Focus panel by visual position |
+| `⌘1`–`⌘9` | Focus panel by creation order |
 | `Alt+Tab` / `Ctrl+Tab` | Cycle panels (`Shift` reverses) |
 | `Enter` | Send (in a session composer) |
 | `Esc` | Interrupt the focused session's turn |

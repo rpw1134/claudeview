@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { selectFocusedPanel, useWorkspaceStore } from '@/stores/workspaceStore'
+import { collectPanelIds } from '@/lib/layoutTree'
 import { useStreamBridge } from '@/hooks/useStreamBridge'
 import { api } from '@/lib/api'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
@@ -38,6 +39,48 @@ export function App() {
         return
       }
 
+      /*
+       * Option-key panel commands.
+       *
+       * Matched on `event.code` (the physical key), not `event.key`: on macOS
+       * Option+letter produces a composed character (`Opt+C` is `ç`), so `key`
+       * never says "c". `stopPropagation` matters as much as `preventDefault`
+       * here — the listener runs in the capture phase so these combos win over
+       * xterm, which would otherwise type the composed character into the shell.
+       */
+      if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+        const digit = /^Digit([1-8])$/.exec(event.code)
+        if (digit) {
+          // Visual order — left to right, top to bottom — same as panel cycling,
+          // unlike Cmd+number which follows creation order.
+          const target = collectPanelIds(layout)[Number(digit[1]) - 1]
+          if (target) {
+            event.preventDefault()
+            event.stopPropagation()
+            focusPanel(target, true)
+          }
+          return
+        }
+
+        // Splits inherit the focused panel's kind: splitting a terminal gives
+        // another shell alongside it, splitting a session another session.
+        const focusedKind =
+          selectFocusedPanel(useWorkspaceStore.getState())?.kind ?? 'session'
+        const command: Record<string, (() => void) | undefined> = {
+          KeyT: () => void addPanel('session'),
+          KeyC: () => void addPanel('terminal'),
+          KeyA: () => void addPanel(focusedKind, { direction: 'row' }),
+          KeyS: () => void addPanel(focusedKind, { direction: 'column' }),
+        }
+        const run = command[event.code]
+        if (run) {
+          event.preventDefault()
+          event.stopPropagation()
+          run()
+        }
+        return
+      }
+
       const accel = event.metaKey || event.ctrlKey
       if (!accel) return
 
@@ -59,9 +102,10 @@ export function App() {
       }
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [panels, focusedPanelId, addPanel, closePanel, focusPanel, cyclePanel])
+    // Capture phase, so panel commands are seen before xterm's own key handling.
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [panels, layout, focusedPanelId, addPanel, closePanel, focusPanel, cyclePanel])
 
   /*
    * Swallow file drops that miss a composer.

@@ -30,7 +30,7 @@ export function ErrorRow({
   onRetry: (itemId: string, text: string) => void
 }) {
   return (
-    <div className="-mx-3 my-2 flex items-start gap-2 rounded-lg bg-danger/10 px-3 py-2.5">
+    <div className="hand-2 my-2 flex items-start gap-2 bg-danger/10 px-3 py-2.5">
       <CircleAlert size={14} className="mt-0.5 shrink-0 text-danger" aria-hidden />
       <p className="min-w-0 flex-1 text-sm leading-relaxed text-text-muted" data-selectable>
         {item.message}

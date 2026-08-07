@@ -5,6 +5,67 @@ component, take its values from here rather than picking new ones.
 
 ---
 
+## 0. The register: warm and drawn, not technical
+
+The app defaults to **Paper**: warm cream ground, ink-brown text, ochre accent, a
+faint fractal grain, and a handwritten face on a handful of display strings.
+
+That's a deliberate reversal. The earlier palette was five cool greys with a blue
+accent — the default register of every developer tool ever made, which is exactly
+why it reads as *technical* rather than as something you'd want open all day. Three
+things carry the change:
+
+**Neutral chroma.** Paper and Hearth run their neutrals at 0.012–0.016 chroma
+against 0.007 for the cool themes. A neutral with no chroma reads as a rendered
+surface; one with a trace of yellow-red reads as a material. It's the same trick
+that stops dark greys looking dead, pushed far enough to be *felt*.
+
+**An ochre accent.** Blue is the single loudest technical signal a palette has.
+
+**Paper inverts the depth relationship.** Its panels sit *darker* than the window,
+the way a card laid on a desk does — the standard light mode does the opposite,
+white cards floating on grey, which is a screen convention rather than a physical
+one. It gets its own ramp (`PAPER_RAMP`) for that reason.
+
+### Where "hand-drawn" is allowed
+
+Accents and assets only — never prose, never panel headers, never code.
+
+The written face in particular is on a hard budget: **two strings in the whole
+app**. It reached eleven usages at one point — subtitles, field labels, the split
+control, the activity label ticking away once a second — and a voice used that
+often stops being a voice and becomes the typeface. If you're adding a third, the
+answer is almost certainly no.
+
+| Treatment | Where |
+| --- | --- |
+| The mark (`Mark.tsx`) | The activity line, the thinking toggle, the wordmark, the app icon |
+| Written face (`--font-display`) | The wordmark, and one home-screen heading. Nothing else. |
+| Uneven corners (`hand-1`, `hand-2`, `hand-sm-*`) | Panels, notes, buttons, the composer |
+| Drawn rules (`Sketch.tsx`) | Section breaks |
+| Paper grain | The window background |
+
+Four *different* corner radii on one box is the cheapest convincing "drawn by a
+person" cue there is — the eye reads the asymmetry long before it can name it, and
+it costs one property rather than an SVG border-image per element.
+
+### The mark
+
+A six-armed asterisk with hand-set angles, arm lengths varying by up to 12%, and a
+bow on each stroke. The asymmetry is functional as well as stylistic: a perfectly
+symmetric asterisk has no legible rotation — spin it and it stutters between six
+identical positions — so the `working` state needs uneven arms to read as turning.
+
+Each arm is its own path, so the states are real animation rather than a spinner
+swapped in: `idle` still, `thinking` breathing, `working` rotating, `writing`
+rippling arm by arm, `failed` settled crooked. All `transform`/`opacity`, so eight
+can run beside a streaming transcript without touching layout.
+
+`scripts/make-icon.mjs` draws the same geometry at 1024px, so the dock icon and the
+in-app mark are one drawing rather than two things that happen to match.
+
+---
+
 ## 1. Surfaces — depth by fill, not by outline
 
 Five levels, each a step on one lightness ramp:
@@ -13,7 +74,7 @@ Five levels, each a step on one lightness ramp:
 | --- | --- |
 | `--bg` | The window. The transcript sits directly on it. |
 | `--surface` | Panels: toolbar, panel headers, expanded tool calls. |
-| `--raised` | Controls and objects: buttons, active tabs, user bubbles, input fields. |
+| `--raised` | Controls and objects: buttons, active tabs, input fields. |
 | `--overlay` | Floating things: dialogs, hover state on raised controls. |
 | `--line` / `--line-strong` | Dividers / control boundaries. |
 
@@ -21,6 +82,21 @@ Five levels, each a step on one lightness ramp:
 maximum-contrast event, which is what "too black" actually describes — the eye never
 gets to rest. Body text sits at ~13.7:1 rather than ~16:1: still comfortably AAA,
 noticeably calmer.
+
+### `faint` was failing AA, in every colorway
+
+`--text-faint` carries timestamps, paths, and token counts — small, but real
+information, so it owes 4.5:1 like any other text. It measured **3.36:1** against
+`--bg` on every dark colorway and 3.16:1 on the light one.
+
+An earlier pass reported the palette contrast-verified. It had measured `text`,
+`muted`, and the border tokens, and never measured the tier most likely to fail —
+which is the tier most likely to fail. The values are now solved numerically per
+ramp against the worst of `bg`/`surface`/`raised` across every colorway that uses
+it (dark 0.585 → 0.66, light 0.60 → 0.515, paper 0.494), and all seven clear 4.5:1.
+
+The cost is a tighter gap between `muted` and `faint` — three text tiers instead of
+three very distinct ones. Correctness wins; hierarchy has size and weight too.
 
 ### The border budget
 
@@ -68,18 +144,41 @@ groups, so proximity alone shows what belongs together:
 
 ### Alignment
 
-Everything in the transcript column shares one left edge — prose, tool rows, the
-thinking toggle, and the composer's input shell.
+The transcript is a **chat thread**, and the agent gets the whole width.
 
-Two traps, both of which produced visible misalignment here:
+Agent output — prose, code, tables, tool rows — runs edge to edge inside the panel's
+gutter. No rail, no indent, no centred column. That output is what the app is for, so
+anything insetting it is spending width on decoration. Your turns are the exception:
+right-aligned, tinted, capped at 78% so they **cross the centreline** — capping at
+half leaves a hard channel down the middle and squeezes a long message into a ribbon.
 
-1. **Padded rows need a negative margin.** A tool row with `px-3` insets its text
-   12px from the prose. `-mx-3 px-3` puts the text back on the shared edge while
-   the hover fill still extends past it.
-2. **Put the padding on the max-width box, not the wrapper.** `Transcript` and
-   `Composer` must apply `px-8` at the same level of their DOM. Padding the
-   full-width wrapper instead makes the composer 32px wider per side than the prose
-   column — subtle in isolation, obvious once you look for it.
+Side alone carries authorship, which is why the agent needs no marker per message.
+Separation between turns is **vertical**: 32px above each of your messages and 20px
+below, tighter spacing within a single response. Gestalt proximity does the grouping
+a rail used to do, without costing any width.
+
+Two earlier versions of this were wrong in opposite directions. `mx-auto` on a
+`measure + 8rem` box left an empty margin on *both* sides, and the wider the panel
+the more of it was nothing. Replacing that with a left rail for every row fixed the
+centring but still indented the content and put a glyph above a glyph whenever a turn
+both thought and spoke.
+
+**The measure applies to paragraphs, not the container.** `--measure` caps `p`,
+`ul`, `ol`, `blockquote` and headings inside `.prose-stream`; `pre` and `table` use
+the full width. Capping the container punished code and tables for a rule that only
+exists for running text.
+
+Gutters are `@container` queries against the **panel** — **16 / 28 / 40px** — because
+once you can split eight ways the window's width says nothing about how much room a
+given panel has. The transcript, composer, lane tabs and reconnect row all use the
+same three values, and the toolbar's right gutter is the widest of them plus the
+mosaic's own 8px padding, so its last control lands on the same vertical line as the
+content below it.
+
+One trap that produced visible misalignment: **a width cap must wrap its gutter,
+not the other way around.** Padding applied outside the cap offsets the element by
+exactly the gutter width — measured at the time, prose at x=268 and the composer
+shell at x=236.
 
 ---
 

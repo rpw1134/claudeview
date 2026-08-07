@@ -29,6 +29,8 @@ type SessionState = {
   setActiveLane: (tabId: string, laneId: string) => void
   renameTab: (tabId: string, title: string) => void
 
+  /** Hold the unsent message, so it survives the composer being remounted. */
+  setDraft: (tabId: string, draft: string, attachments?: string[]) => void
   send: (tabId: string, text: string) => Promise<void>
   /** Resend a failed turn, removing the error row it came from. */
   retry: (tabId: string, itemId: string, text: string) => Promise<void>
@@ -60,6 +62,8 @@ function emptyTab(id: string, options: Partial<CreateSessionRequest> & { title?:
     laneOrder: [MAIN_LANE],
     activeLaneId: MAIN_LANE,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    draft: '',
+    draftAttachments: [],
     createdAt: Date.now(),
     seenBlockIds: new Set(),
     echoedTurnIds: new Set(),
@@ -264,6 +268,10 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         break
 
       case 'result':
+        // The turn is over, so nothing is still streaming. Without this a block the
+        // model abandoned mid-turn keeps its caret blinking under a finished
+        // answer, promising output that isn't coming.
+        streamBuffers.finishAllFor(`${tab.id}::`)
         // Accumulate across turns so the status bar shows the session total, not
         // just the last turn.
         usage = {
@@ -460,10 +468,21 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
    * optimistic state into a visible failure with the text preserved for retry.
    * Optimism that can't be walked back is just a lie.
    */
+  setDraft: (tabId, draft, attachments) =>
+    setState((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId
+          ? { ...tab, draft, draftAttachments: attachments ?? tab.draftAttachments }
+          : tab,
+      ),
+    })),
+
   send: async (tabId, text) => {
     if (!text.trim()) return
 
     const turnId = newId()
+    // Clearing the draft is part of sending, so the two can't disagree.
+    getState().setDraft(tabId, '', [])
     getState().applyEvents(tabId, [
       { kind: 'user-message', text, agent: { id: MAIN_LANE }, turnId },
       { kind: 'status', status: 'thinking' },

@@ -5,13 +5,15 @@
  *
  * ## Why the icon is drawn in code
  *
- * The mark is three streaming text bars, and its colours are the *same* OKLCH
- * values the UI theme is built from (`src/lib/theme.ts`, `slate` colorway). Drawing
- * it here rather than committing a binary means the icon and the interface can't
- * drift apart: change the accent and re-run, and the dock icon follows.
+ * It is the *same drawing* as the in-app mark (`src/components/Mark.tsx`): a
+ * six-armed asterisk with hand-set angles, uneven arm lengths and a slight bow on
+ * each stroke. The arm table below is a copy of that component's, and the colours
+ * come from the same OKLCH values the theme is built from (`paper`). Generating the
+ * icon rather than committing a binary is what keeps the dock and the interface
+ * showing one identity instead of two things that used to match.
  *
- * It also keeps the repo dependency-free. A rounded rectangle and four bars need a
- * rasteriser about forty lines long — not an image toolchain.
+ * It also keeps the repo dependency-free. A rounded rectangle and six bowed strokes
+ * need a rasteriser about sixty lines long — not an image toolchain.
  *
  * Outputs `build/icon.png` (1024²) plus `build/icon.icns` on macOS, which is what
  * electron-builder picks up by convention from `build/`.
@@ -54,12 +56,11 @@ function oklchToRgb(l, c, hDegrees) {
   })
 }
 
-// The `slate` colorway: accent, and a dark base a little deeper than --bg so the
-// icon reads as its own object rather than a hole in the dock.
-const ACCENT = oklchToRgb(0.7, 0.115, 250)
-const ACCENT_DIM = oklchToRgb(0.58, 0.105, 255)
-const BASE_TOP = oklchToRgb(0.28, 0.012, 265)
-const BASE_BOTTOM = oklchToRgb(0.185, 0.008, 265)
+// The `paper` colorway. Warm cream ground, ochre mark — the app's own palette, so
+// the icon in the dock is the first thing that tells you what's inside.
+const ACCENT = oklchToRgb(0.52, 0.115, 55)
+const BASE_TOP = oklchToRgb(0.965, 0.016, 75)
+const BASE_BOTTOM = oklchToRgb(0.912, 0.020, 75)
 
 // ---------------------------------------------------------------------------
 // Rasteriser
@@ -131,40 +132,65 @@ fillRoundedRect(base, (_x, y) => {
 })
 
 /*
- * The mark: three bars of decreasing width, plus a caret at the end of the last
- * one — a paragraph mid-stream, which is what the app is for. Decreasing width is
- * what makes it read as text rather than as a menu icon.
+ * The mark: six bowed strokes radiating from just off centre.
+ *
+ * Angles, lengths and bows are copied from `ARMS` in src/components/Mark.tsx. The
+ * asymmetry is the point — a perfectly regular asterisk reads as a glyph from a
+ * font, and this has to read as something someone drew.
  */
-const barHeight = SIZE * 0.088
-const gap = SIZE * 0.062
-const left = SIZE * 0.245
-const top = SIZE * 0.335
-const widths = [0.51, 0.4, 0.27]
+const ARMS = [
+  { angle: 2, length: 1.0, bow: 0.05, weight: 1.15 },
+  { angle: 58, length: 0.9, bow: -0.06, weight: 0.95 },
+  { angle: 123, length: 0.97, bow: 0.04, weight: 1.05 },
+  { angle: 178, length: 0.88, bow: 0.07, weight: 0.9 },
+  { angle: 241, length: 1.0, bow: -0.05, weight: 1.1 },
+  { angle: 302, length: 0.92, bow: 0.05, weight: 1.0 },
+]
 
-widths.forEach((width, index) => {
-  fillRoundedRect(
-    {
-      x: left,
-      y: top + index * (barHeight + gap),
-      w: SIZE * width,
-      h: barHeight,
-      r: barHeight / 2,
-    },
-    () => (index === 0 ? ACCENT : ACCENT_DIM),
-  )
-})
+const MARK_CENTER = SIZE / 2
+const MARK_RADIUS = SIZE * 0.30
+const STROKE = SIZE * 0.052
 
-// The caret sits at the live edge of the shortest bar.
-fillRoundedRect(
-  {
-    x: left + SIZE * widths[2] + SIZE * 0.045,
-    y: top + 2 * (barHeight + gap),
-    w: barHeight * 0.72,
-    h: barHeight,
-    r: barHeight * 0.3,
-  },
-  () => ACCENT,
-)
+/** Quadratic Bezier point at t. */
+function quad(p0, p1, p2, t) {
+  const u = 1 - t
+  return [u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]]
+}
+
+/** Stamp a round dot — the rasteriser's "pen". Strokes are dots along a curve. */
+function dot(cx, cy, radius, color) {
+  const x0 = Math.max(0, Math.floor(cx - radius - 1))
+  const x1 = Math.min(SIZE, Math.ceil(cx + radius + 1))
+  const y0 = Math.max(0, Math.floor(cy - radius - 1))
+  const y1 = Math.min(SIZE, Math.ceil(cy + radius + 1))
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+      const coverage = Math.min(1, Math.max(0, radius + 0.5 - d))
+      if (coverage > 0) blend(x, y, color, coverage)
+    }
+  }
+}
+
+for (const arm of ARMS) {
+  const radians = (arm.angle * Math.PI) / 180
+  const dx = Math.cos(radians)
+  const dy = Math.sin(radians)
+
+  const p0 = [MARK_CENTER + dx * MARK_RADIUS * 0.05, MARK_CENTER + dy * MARK_RADIUS * 0.05]
+  const p2 = [MARK_CENTER + dx * MARK_RADIUS * arm.length, MARK_CENTER + dy * MARK_RADIUS * arm.length]
+  const p1 = [(p0[0] + p2[0]) / 2 - dy * MARK_RADIUS * arm.bow, (p0[1] + p2[1]) / 2 + dx * MARK_RADIUS * arm.bow]
+
+  // Dense enough that consecutive dots overlap into a continuous stroke.
+  const steps = Math.ceil(MARK_RADIUS * 2)
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps
+    const [x, y] = quad(p0, p1, p2, t)
+    // Taper toward the tip, the way a pen lifts.
+    const taper = 1 - 0.25 * t
+    dot(x, y, (STROKE * arm.weight * taper) / 2, ACCENT)
+  }
+}
 
 // ---------------------------------------------------------------------------
 // PNG encoding

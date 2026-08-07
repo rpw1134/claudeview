@@ -34,10 +34,13 @@ for the job.
 - **Attachments.** Drop files or folders onto a composer, or use the paperclip
   (`⌥` for folders). Paths are sent as references, not contents — the agent has file
   tools and a permission model, so it reads what it needs when it needs it.
-- **Adjustable appearance.** Five colorways, four typefaces, and live control over
-  text size, line height, and line width. `⌘,` Colorways are generated from one
-  shared lightness ramp, so contrast is identical across all five — see
-  [design-system.md](docs/design-system.md).
+- **Warm by default.** Ships in **Paper** — cream ground, ink-brown text, ochre
+  accent, a faint grain, and a hand-drawn asterisk that animates through thinking,
+  working, and writing. **Hearth** is its dark counterpart; the five cool colorways
+  are still there. Every one is generated from a shared lightness ramp and measured
+  against WCAG AA — see [design-system.md](docs/design-system.md).
+- **Adjustable appearance.** Seven colorways, four typefaces, and live control over
+  text size, line height, and line width. `⌘,`
 - **Auto permission mode by default**, changeable per session from its composer.
 
 ## Requirements
@@ -74,11 +77,14 @@ npm run dev
 | `Enter`        | Send message               |
 | `Shift+Enter`  | Newline                    |
 | `Esc`          | Stop the current turn      |
-| `⌘T` / `Ctrl+T`| New session panel          |
-| `⇧⌘T`          | New terminal panel         |
+| `⌘T` / `⌥T`    | New session (thread) panel |
+| `⇧⌘T` / `⌥C`   | New terminal (console) panel |
+| `⌥A`           | Split vertically (new panel right, same kind as focused) |
+| `⌥S`           | Split horizontally (new panel below, same kind as focused) |
 | `⌘W` / `Ctrl+W`| Close the focused panel    |
 | `⌥Tab` / `Ctrl+Tab` | Cycle panels (`⇧` reverses) |
-| `⌘1`–`⌘9`      | Focus panel by position    |
+| `⌥1`–`⌥8`      | Focus panel by visual position (left-to-right, top-to-bottom) |
+| `⌘1`–`⌘9`      | Focus panel by creation order |
 | `⌘,`           | Appearance settings        |
 
 ## How it fits together

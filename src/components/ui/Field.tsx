@@ -97,7 +97,7 @@ export function Select({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        'h-9 w-full rounded-md border border-line-strong bg-raised px-3 text-sm text-text',
+        'h-9 w-full hand-sm-2 border border-line-strong bg-raised px-3 text-sm text-text',
         'transition-colors hover:border-accent',
         className,
       )}

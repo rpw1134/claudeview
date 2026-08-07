@@ -28,6 +28,7 @@ export function SessionPanel({
   const reconnect = useSessionStore((state) => state.reconnect)
   const send = useSessionStore((state) => state.send)
   const retry = useSessionStore((state) => state.retry)
+  const setDraft = useSessionStore((state) => state.setDraft)
   const interrupt = useSessionStore((state) => state.interrupt)
   const setPermissionMode = useSessionStore((state) => state.setPermissionMode)
 
@@ -49,6 +50,10 @@ export function SessionPanel({
   )
   const onSend = useCallback((text: string) => void send(tabId, text), [send, tabId])
   const onInterrupt = useCallback(() => void interrupt(tabId), [interrupt, tabId])
+  const onDraftChange = useCallback(
+    (draft: string, attachments: string[]) => setDraft(tabId, draft, attachments),
+    [setDraft, tabId],
+  )
 
   if (!tab) {
     return <p className="p-4 text-sm text-text-faint">Session not found.</p>
@@ -84,7 +89,7 @@ export function SessionPanel({
         <div className="shrink-0">
           <div
             className="mx-auto flex w-full max-w-[calc(var(--measure)+8rem)] items-center gap-2
-                       px-3 pb-2 @[30rem]:px-5 @[48rem]:px-8"
+                       px-4 pb-2 @[30rem]:px-7 @[48rem]:px-10"
           >
             <AlertCircle
               size={13}
@@ -109,6 +114,9 @@ export function SessionPanel({
         permissionMode={tab.permissionMode}
         panelFocused={panelFocused}
         autoFocusToken={autoFocusToken}
+        draft={tab.draft}
+        draftAttachments={tab.draftAttachments}
+        onDraftChange={onDraftChange}
         onSend={onSend}
         onInterrupt={onInterrupt}
         onPermissionModeChange={(mode) => void setPermissionMode(tab.id, mode)}
