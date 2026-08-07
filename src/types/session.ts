@@ -77,6 +77,12 @@ export type Tab = {
   usage: TokenUsage
   lastError?: string
   /**
+   * How the most recent turn ended, for the transcript's settled footer.
+   * Cleared when the next turn is sent — completion is a state the turn rests
+   * in, not a notification that flashes and disappears.
+   */
+  lastTurn?: { ok: boolean; durationMs: number }
+  /**
    * The unsent message, and anything attached to it.
    *
    * Lives on the tab rather than in the composer's own state because a composer

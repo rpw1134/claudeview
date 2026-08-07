@@ -3,7 +3,8 @@ import { ArrowDown, ChevronRight } from 'lucide-react'
 import type { SessionStatus } from '@shared/ipc'
 import type { Lane, TranscriptItem } from '@/types/session'
 import { useStickyScroll } from '@/hooks/useStickyScroll'
-import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
+import { useIsStreaming } from '@/hooks/useStreamedText'
+import { ActivityIndicator, formatElapsed, isBusyStatus } from './ActivityIndicator'
 import { ErrorRow } from './ErrorRow'
 import { Mark } from './Mark'
 import { StreamingMarkdown } from './StreamingMarkdown'
@@ -42,18 +43,38 @@ import { cn } from '@/lib/utils'
 export function Transcript({
   lane,
   status,
+  lastTurn,
   showActivity,
   onOpenLane,
   onRetry,
 }: {
   lane: Lane
   status: SessionStatus
+  /** How the most recent turn ended; drives the settled footer. */
+  lastTurn?: { ok: boolean; durationMs: number }
   /** Only the lane that owns the turn shows it — not every subagent tab at once. */
   showActivity: boolean
   onOpenLane: (id: string) => void
   onRetry: (itemId: string, text: string) => void
 }) {
   const { ref, isPinned, scrollToBottom } = useStickyScroll()
+
+  /*
+   * The tail is a single slot that RESOLVES rather than a row that appears and
+   * vanishes. While a turn runs it holds the activity line; when the turn ends
+   * it settles into a quiet "done · 12s" footer that stays until the next send.
+   * An unmount here meant completion read as an abrupt absence — the layout
+   * snapped up a line and the only sign the turn finished was that nothing was
+   * moving any more.
+   *
+   * One suppression: while the model is reasoning, the *thinking row itself* is
+   * the last item and already says "thinking" with a live mark. A tail line
+   * repeating the same word directly beneath it said everything twice.
+   */
+  const lastItem = lane.items[lane.items.length - 1]
+  const busy = showActivity && isBusyStatus(status)
+  const thinkingRowOwnsTheTail = status === 'thinking' && lastItem?.kind === 'thinking'
+  const settled = showActivity && !busy && lastTurn?.ok === true && lane.items.length > 0
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -71,10 +92,12 @@ export function Transcript({
             appear. After pressing Enter the eye is here — a header-only indicator
             means the one place you're looking is the one place nothing happens.
           */}
-          {showActivity && isBusyStatus(status) ? (
+          {busy && !thinkingRowOwnsTheTail ? (
             <div className="mt-2 mb-1">
               <ActivityIndicator status={status} />
             </div>
+          ) : settled ? (
+            <TurnFooter durationMs={lastTurn!.durationMs} />
           ) : null}
 
           {/* Room so the last line never sits against the composer. */}
@@ -167,6 +190,10 @@ function UserTurn({ text }: { text: string }) {
  */
 function ThinkingBlock({ blockId }: { blockId: string }) {
   const [expanded, setExpanded] = useState(false)
+  // Live while thoughts are still arriving: the mark breathes and the row is the
+  // turn's indicator (the tail line stands down — see Transcript). Once the
+  // thinking ends it settles to the still, faint mark.
+  const streaming = useIsStreaming(blockId)
 
   return (
     <div className="my-1">
@@ -176,8 +203,12 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
                    text-text-faint transition-colors hover:text-text-muted"
         aria-expanded={expanded}
       >
-        <Mark state="idle" size={15} className="shrink-0 text-accent/60" />
-        thinking
+        <Mark
+          state={streaming ? 'thinking' : 'idle'}
+          size={15}
+          className={cn('shrink-0', streaming ? 'text-accent' : 'text-accent/60')}
+        />
+        {streaming ? 'thinking…' : 'thinking'}
         <ChevronRight
           size={12}
           className={cn('transition-transform duration-150', expanded && 'rotate-90')}
@@ -188,6 +219,25 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
           <StreamingMarkdown blockId={blockId} className="text-[0.92em] italic" />
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * The turn's resting state: the mark gone still, "done", and how long it took.
+ *
+ * Faint on purpose — this is a full stop, not an announcement. Its job is to be
+ * the visible difference between "finished" and "hung": before it existed, both
+ * looked like a transcript that had simply stopped moving. It occupies the same
+ * slot the activity line did, so completion is a *transition* (accent motion →
+ * faint stillness) rather than a layout snap.
+ */
+function TurnFooter({ durationMs }: { durationMs: number }) {
+  return (
+    <div className="fade-in-soft mt-2 mb-1 flex items-center gap-2 text-xs text-text-faint">
+      <Mark state="idle" size={15} className="text-accent/50" />
+      <span>done</span>
+      <span className="tabular-nums">· {formatElapsed(Math.max(1, Math.round(durationMs / 1000)))}</span>
     </div>
   )
 }

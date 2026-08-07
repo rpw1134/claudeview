@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Folder, FileText, Paperclip, Square, X } from 'lucide-react'
 import { PermissionMenu } from './PermissionMenu'
+import { isBusyStatus } from './ActivityIndicator'
 import type { PermissionMode, SessionStatus } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { basename, composeMessage, mergeAttachments } from '@/lib/attachments'
@@ -92,7 +93,7 @@ export function PanelComposer({
   // enter/leave pair flickers. Counting depth is the standard fix.
   const dragDepth = useRef(0)
 
-  const isBusy = status === 'thinking' || status === 'streaming' || status === 'tool'
+  const isBusy = isBusyStatus(status)
   const disabled = status === 'closed' || status === 'error'
 
   useEffect(() => {

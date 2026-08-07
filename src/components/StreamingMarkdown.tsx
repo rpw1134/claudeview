@@ -43,9 +43,12 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
     if (stableRef.current && stableHtml) highlightCodeBlocks(stableRef.current)
   }, [stableHtml])
 
-  if (!text) {
-    return isStreaming ? <span className="stream-caret" aria-hidden /> : null
-  }
+  // No caret. It was an inline bar appended after the tail's rendered markdown,
+  // and since markdown renders block elements it never sat at the end of the
+  // text — it dropped onto its own line below the prose and blinked there,
+  // detached. Liveness belongs to the activity mark at the transcript tail;
+  // the words themselves just appear.
+  if (!text) return null
 
   return (
     <div
@@ -61,7 +64,6 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
       {tailHtml ? (
         <div className="inline [&>*:first-child]:mt-0" dangerouslySetInnerHTML={{ __html: tailHtml }} />
       ) : null}
-      {isStreaming ? <span className="stream-caret" aria-hidden /> : null}
     </div>
   )
 })

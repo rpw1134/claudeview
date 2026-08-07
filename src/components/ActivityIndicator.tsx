@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
  */
 const LABELS: Partial<Record<SessionStatus, string>> = {
   starting: 'waking up',
+  processing: 'processing',
   thinking: 'thinking',
   streaming: 'writing',
   tool: 'working',
@@ -45,7 +46,9 @@ const LABELS: Partial<Record<SessionStatus, string>> = {
  */
 
 export function isBusyStatus(status: SessionStatus): boolean {
-  return status === 'thinking' || status === 'streaming' || status === 'tool'
+  return (
+    status === 'processing' || status === 'thinking' || status === 'streaming' || status === 'tool'
+  )
 }
 
 export function ActivityIndicator({
@@ -72,9 +75,12 @@ export function ActivityIndicator({
         : { role: 'status', 'aria-label': `${label}, ${elapsed} seconds elapsed` })}
       className={cn('flex items-center gap-2 text-sm text-accent', className)}
     >
-      {/* The mark itself, in the state it's in. One drawn thing that changes
-          behaviour, rather than a different spinner per phase. */}
-      {compact ? <Mark state={markStateFor(status)} size={15} /> : null}
+      {/* The mark itself, in the state it's in — one drawn thing that changes
+          behaviour, rather than a different spinner per phase. It renders in BOTH
+          forms: an earlier pass gated it to `compact`, which stripped the glyph
+          and all its animation from the transcript tail — the one place you're
+          actually looking — and left "thinking…" as bare text. */}
+      <Mark state={markStateFor(status)} size={compact ? 15 : 17} />
       {compact ? null : (
         <>
           <span>{label}…</span>
@@ -103,6 +109,8 @@ export function formatElapsed(seconds: number): string {
 function markStateFor(status: SessionStatus): MarkState {
   if (status === 'streaming') return 'writing'
   if (status === 'tool') return 'working'
+  // `processing` shares the breathe: the distinction the label carries doesn't
+  // need a fourth motion, it needs the right word next to a live glyph.
   return 'thinking'
 }
 

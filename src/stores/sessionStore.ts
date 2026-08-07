@@ -128,6 +128,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
   let usage = tab.usage
   let lastError = tab.lastError
   let title = tab.title
+  let lastTurn = tab.lastTurn
 
   const laneFor = (laneId: string): Lane => {
     let lane = lanes[laneId]
@@ -185,6 +186,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         if (event.turnId && echoedTurnIds.has(event.turnId)) break
 
         if (event.turnId) echoedTurnIds.add(event.turnId)
+        // A new turn is beginning; the previous turn's settled footer comes down.
+        if (event.agent.id === MAIN_LANE) lastTurn = undefined
         const lane = laneFor(event.agent.id)
         lane.items.push({ kind: 'user', id: newId(), text: event.text, turnId: event.turnId })
         // First user turn names the tab, so the tab strip is readable at a glance.
@@ -280,6 +283,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
           cacheReadTokens: usage.cacheReadTokens + event.usage.cacheReadTokens,
           cacheCreationTokens: usage.cacheCreationTokens + event.usage.cacheCreationTokens,
         }
+        // What the tail's settled footer shows once the activity line resolves.
+        lastTurn = { ok: event.ok, durationMs: event.durationMs }
         break
 
       case 'error': {
@@ -313,6 +318,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     tools,
     usage,
     lastError,
+    lastTurn,
     lanes,
     laneOrder,
     seenBlockIds,
@@ -485,7 +491,9 @@ export const useSessionStore = create<SessionState>()((setState, getState) => ({
     getState().setDraft(tabId, '', [])
     getState().applyEvents(tabId, [
       { kind: 'user-message', text, agent: { id: MAIN_LANE }, turnId },
-      { kind: 'status', status: 'thinking' },
+      // `processing`, not `thinking`: nothing has come back yet, and the tail
+      // indicator should say so rather than pretending the model is reasoning.
+      { kind: 'status', status: 'processing' },
     ])
 
     let response: { ok: boolean; error?: string }

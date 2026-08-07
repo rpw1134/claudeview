@@ -50,7 +50,14 @@ export type SessionStatus =
   | 'starting'
   /** Attached, nothing in flight. */
   | 'idle'
-  /** A turn is underway but the model hasn't produced anything renderable yet. */
+  /**
+   * A turn was sent and nothing has come back yet. Set optimistically by the
+   * renderer on send; replaced by `thinking`/`streaming`/`tool` the moment the
+   * stream produces anything. Distinct from `thinking` so the request-in-flight
+   * gap doesn't masquerade as the model reasoning.
+   */
+  | 'processing'
+  /** The model is reasoning (extended thinking deltas are arriving). */
   | 'thinking'
   /** Producing visible text. */
   | 'streaming'

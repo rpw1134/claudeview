@@ -72,6 +72,7 @@ export function SessionPanel({
           key={`${tab.id}:${lane.id}`}
           lane={lane}
           status={tab.status}
+          lastTurn={tab.lastTurn}
           // A subagent lane is a view onto work the *main* thread commissioned, so
           // showing "Thinking…" at the foot of every open lane would claim several
           // things are running when one is.
