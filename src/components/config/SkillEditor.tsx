@@ -1,18 +1,44 @@
-import { useCallback, useEffect, useState } from 'react'
-import { FilePlus2, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FilePlus2, Trash2, X } from 'lucide-react'
 import type { SkillFiles } from '@shared/ipc'
+import { parseSkillFrontmatter, serializeFrontmatter, type SkillFrontmatter } from '@shared/frontmatter'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { EditorHeader, TextArea, useSaveState } from './editorParts'
+import { SkillFrontmatterFields, type SkillFormState } from './SkillFrontmatterFields'
+
+const fromFrontmatter = (name: string, frontmatter: SkillFrontmatter, body: string): SkillFormState => ({
+  name,
+  description: frontmatter.description ?? '',
+  argumentHint: frontmatter['argument-hint'] ?? '',
+  userInvocable: frontmatter['user-invocable'] !== false,
+  disableModelInvocation: frontmatter['disable-model-invocation'] === true,
+  body,
+})
+
+const toContent = (existing: SkillFrontmatter, form: SkillFormState): string =>
+  serializeFrontmatter(
+    {
+      ...existing,
+      name: form.name,
+      description: form.description,
+      'argument-hint': form.argumentHint,
+      'user-invocable': form.userInvocable ? undefined : false,
+      'disable-model-invocation': form.disableModelInvocation ? true : undefined,
+    },
+    form.body,
+  )
 
 /**
- * Edit one skill: SKILL.md, its markdown companions, and its `scripts/` files.
+ * Edit one skill: SKILL.md (frontmatter form + body), its markdown
+ * companions, and its `scripts/` files.
  *
- * Everything is edited as plain text. SKILL.md's frontmatter could get the same
- * form treatment as agents, but a skill is fundamentally a *document* the model
- * reads — the body dominates, and a form would bury it under fields most skills
- * never set. The file strip keeps every file one click away instead.
+ * Everything but SKILL.md is edited as plain text — a companion file is
+ * whatever the skill author wants it to be, so a form would have to guess at
+ * structure that doesn't exist. SKILL.md gets the frontmatter fields Claude
+ * Code actually reads, above the body, because those fields decide whether
+ * and how the skill is ever loaded.
  */
 export function SkillEditor({
   projectPath,
@@ -27,9 +53,12 @@ export function SkillEditor({
   const [active, setActive] = useState('SKILL.md')
   const [loaded, setLoaded] = useState<string | null>(null)
   const [content, setContent] = useState('')
+  const [skillForm, setSkillForm] = useState<SkillFormState | null>(null)
   const [adding, setAdding] = useState<null | 'file' | 'script'>(null)
   const [newFile, setNewFile] = useState('')
   const save = useSaveState()
+
+  const isSkillMd = active === 'SKILL.md'
 
   const refreshFiles = useCallback(() => {
     api['config:skills:files']({ projectPath, name }).then(setFiles).catch(() => undefined)
@@ -39,31 +68,49 @@ export function SkillEditor({
 
   useEffect(() => {
     setLoaded(null)
+    setSkillForm(null)
     api['config:skills:read']({ projectPath, name, file: active })
       .then((text) => {
-        setLoaded(text ?? '')
-        setContent(text ?? '')
+        const found = text ?? ''
+        setLoaded(found)
+        if (active === 'SKILL.md') {
+          const { frontmatter, body } = parseSkillFrontmatter(found)
+          setSkillForm(fromFrontmatter(name, frontmatter, body))
+        } else {
+          setContent(found)
+        }
       })
-      .catch(() => {
-        setLoaded('')
-        setContent('')
-      })
+      .catch(() => setLoaded(''))
   }, [projectPath, name, active])
 
-  const dirty = loaded !== null && content !== loaded
+  const existingFrontmatter = useMemo(
+    () => (loaded === null || !isSkillMd ? {} : parseSkillFrontmatter(loaded).frontmatter),
+    [loaded, isSkillMd],
+  )
+
+  const current = isSkillMd
+    ? skillForm === null
+      ? null
+      : toContent(existingFrontmatter, skillForm)
+    : content
+
+  if (loaded === null || current === null) return null
+  const dirty = current !== loaded
 
   const persist = () =>
     save.run(async () => {
-      await api['config:skills:write']({ projectPath, name, file: active, content })
-      setLoaded(content)
+      await api['config:skills:write']({ projectPath, name, file: active, content: current })
+      setLoaded(current)
     })
 
   const removeSkill = async () => {
+    if (!window.confirm(`Delete the "${name}" skill? This removes its whole directory.`)) return
     await api['config:skills:delete']({ projectPath, name })
     onBack()
   }
 
   const removeFile = async (file: string) => {
+    if (!window.confirm(`Delete ${file}?`)) return
     await api['config:skills:delete-file']({ projectPath, name, file })
     if (file === active) setActive('SKILL.md')
     refreshFiles()
@@ -84,7 +131,7 @@ export function SkillEditor({
   const allFiles = [...files.files, ...files.scripts]
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <EditorHeader onBack={onBack} title={name} dirty={dirty} saveState={save.state}>
         <Button
           variant="ghost"
@@ -100,7 +147,8 @@ export function SkillEditor({
       </EditorHeader>
 
       {/* The file strip. SKILL.md always leads; scripts keep their prefix so the
-          two kinds read differently at a glance. */}
+          two kinds read differently at a glance. The delete × sits visibly on the
+          active chip rather than only appearing on hover, which was easy to miss. */}
       <div className="flex flex-wrap items-center gap-1">
         {allFiles.map((file) => (
           <span key={file} className="group relative inline-flex">
@@ -109,7 +157,8 @@ export function SkillEditor({
               onClick={() => setActive(file)}
               aria-current={file === active ? 'true' : undefined}
               className={cn(
-                'hand-sm-1 px-2 py-1 font-mono text-xs transition-colors',
+                'hand-sm-1 py-1 pl-2 font-mono text-xs transition-colors',
+                file !== 'SKILL.md' ? 'pr-6' : 'pr-2',
                 file === active
                   ? 'bg-accent-wash text-text'
                   : 'text-text-muted hover:bg-raised hover:text-text',
@@ -122,9 +171,13 @@ export function SkillEditor({
                 type="button"
                 onClick={() => void removeFile(file)}
                 aria-label={`Delete ${file}`}
-                className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-raised text-[9px] leading-none text-text-muted hover:text-danger group-hover:flex"
+                className={cn(
+                  'absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center',
+                  'rounded-full text-text-faint transition-colors hover:bg-overlay hover:text-danger',
+                  file === active ? 'flex' : 'hidden group-hover:flex',
+                )}
               >
-                ×
+                <X size={11} />
               </button>
             ) : null}
           </span>
@@ -170,11 +223,26 @@ export function SkillEditor({
         </form>
       ) : null}
 
-      {loaded === null ? null : (
-        <div className="min-h-0 flex-1">
+      {isSkillMd && skillForm ? (
+        <SkillFrontmatterFields
+          state={skillForm}
+          set={(key, value) => setSkillForm((cur) => (cur ? { ...cur, [key]: value } : cur))}
+        />
+      ) : null}
+
+      <div className="min-h-0 flex-1">
+        {isSkillMd && skillForm ? (
+          <TextArea
+            value={skillForm.body}
+            onChange={(body) => setSkillForm((cur) => (cur ? { ...cur, body } : cur))}
+            rows={16}
+            mono
+            aria-label="SKILL.md body"
+          />
+        ) : (
           <TextArea value={content} onChange={setContent} rows={20} mono aria-label={active} />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

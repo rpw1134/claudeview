@@ -1,61 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
 import type { HooksConfig } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
-import { Field, Select } from '@/components/ui/Field'
 import { cn } from '@/lib/utils'
-import { TextArea, TextInput, useSaveState } from './editorParts'
+import { TextArea, useSaveState } from './editorParts'
+import { HOOK_EVENTS, hookEventInfo } from './hookEvents'
+import { HookGroupCard, type Group } from './HookGroupCard'
+import { HookEventPicker } from './HookEventPicker'
 
 /**
- * The hooks editor: a visual list of matcher groups per event, plus a raw JSON
- * view for anything the form doesn't model (http/prompt/agent handlers, `if`
- * conditions, multiple handlers per group).
+ * The hooks editor: a visual list of matcher groups per event, plus a raw
+ * JSON view for anything the form doesn't model.
  *
- * The visual form deliberately edits only command hooks — the overwhelmingly
- * common kind — and passes everything else through untouched: a group it can't
- * render is shown as JSON inline rather than hidden, so switching tabs never
- * becomes the only way to know a hook exists.
+ * Every group and handler this form doesn't have a field for is preserved by
+ * spreading the original object and overriding only the edited keys — see
+ * `HookGroupCard` / `HookHandlerFields` — so switching tabs is never the only
+ * way to keep a hand-written hook intact.
  */
-
-/** Events Claude Code fires, in rough lifecycle order. From the CLI's hook docs. */
-const HOOK_EVENTS = [
-  'SessionStart',
-  'UserPromptSubmit',
-  'PreToolUse',
-  'PostToolUse',
-  'PostToolUseFailure',
-  'PermissionRequest',
-  'PermissionDenied',
-  'Notification',
-  'SubagentStart',
-  'SubagentStop',
-  'Stop',
-  'PreCompact',
-  'PostCompact',
-  'SessionEnd',
-] as const
-
-/** Events where a matcher (tool-name pattern) makes no sense. */
-const NO_MATCHER = new Set(['UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd'])
-
-type Group = { matcher?: string; hooks?: unknown[]; [key: string]: unknown }
-
-const isSimpleCommandGroup = (group: Group): boolean =>
-  Array.isArray(group.hooks) &&
-  group.hooks.length === 1 &&
-  typeof group.hooks[0] === 'object' &&
-  group.hooks[0] !== null &&
-  (group.hooks[0] as Record<string, unknown>).type === 'command' &&
-  typeof (group.hooks[0] as Record<string, unknown>).command === 'string'
-
 export function HooksEditor({ projectPath }: { projectPath: string }) {
   const [loaded, setLoaded] = useState<HooksConfig | null>(null)
   const [hooks, setHooks] = useState<HooksConfig>({})
   const [view, setView] = useState<'visual' | 'json'>('visual')
   const [jsonDraft, setJsonDraft] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
-  const [addingEvent, setAddingEvent] = useState<string>('PreToolUse')
   const save = useSaveState()
 
   useEffect(() => {
@@ -100,12 +67,10 @@ export function HooksEditor({ projectPath }: { projectPath: string }) {
     }
   }
 
-  const updateGroup = (event: string, index: number, patch: Partial<Group>) => {
+  const updateGroup = (event: string, index: number, next: Group) => {
     setHooks((current) => ({
       ...current,
-      [event]: (current[event] ?? []).map((group, i) =>
-        i === index ? { ...(group as Group), ...patch } : group,
-      ),
+      [event]: (current[event] ?? []).map((group, i) => (i === index ? next : group)),
     }))
   }
 
@@ -119,22 +84,19 @@ export function HooksEditor({ projectPath }: { projectPath: string }) {
     })
   }
 
-  const addGroup = () => {
+  const addGroup = (event: string) => {
     setHooks((current) => ({
       ...current,
-      [addingEvent]: [
-        ...(current[addingEvent] ?? []),
-        { matcher: '', hooks: [{ type: 'command', command: '' }] },
-      ],
+      [event]: [...(current[event] ?? []), { matcher: '', hooks: [{ type: 'command', command: '' }] }],
     }))
   }
 
   const events = Object.keys(hooks).sort(
-    (a, b) => HOOK_EVENTS.indexOf(a as never) - HOOK_EVENTS.indexOf(b as never),
+    (a, b) => HOOK_EVENTS.findIndex((e) => e.id === a) - HOOK_EVENTS.findIndex((e) => e.id === b),
   )
 
   return (
-    <div className="flex flex-col gap-4 p-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-0.5">
           {(['visual', 'json'] as const).map((mode) => (
@@ -182,7 +144,7 @@ export function HooksEditor({ projectPath }: { projectPath: string }) {
 
       {view === 'json' ? (
         <>
-          <TextArea value={jsonDraft} onChange={setJsonDraft} rows={20} mono aria-label="Hooks JSON" />
+          <TextArea value={jsonDraft} onChange={setJsonDraft} rows={24} mono aria-label="Hooks JSON" />
           {jsonError ? <p className="text-xs text-danger">{jsonError}</p> : null}
           <p className="text-xs text-text-faint">
             Switch back to Visual to apply — the JSON must parse first.
@@ -191,85 +153,34 @@ export function HooksEditor({ projectPath }: { projectPath: string }) {
       ) : (
         <>
           {events.length === 0 ? (
-            <p className="px-1 py-4 text-center text-sm text-text-faint">
-              No hooks in this scope yet.
+            <p className="px-1 py-10 text-center text-sm text-text-faint">
+              No hooks in this scope yet — add one below.
             </p>
           ) : (
-            events.map((event) => (
-              <section key={event} className="flex flex-col gap-2">
-                <h3 className="text-xs font-medium text-text-muted">{event}</h3>
-                {(hooks[event] ?? []).map((raw, index) => {
-                  const group = raw as Group
-                  return (
-                    <div
+            events.map((event) => {
+              const info = hookEventInfo(event)
+              return (
+                <section key={event} className="flex flex-col gap-2">
+                  <div>
+                    <h3 className="text-sm font-medium text-text">{event}</h3>
+                    <p className="text-xs text-text-faint">{info.description}</p>
+                  </div>
+                  {(hooks[event] ?? []).map((raw, index) => (
+                    <HookGroupCard
                       key={index}
-                      className="flex flex-col gap-2 hand-sm-1 border border-line bg-surface p-2"
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="flex min-w-0 flex-1 flex-col gap-2">
-                          {NO_MATCHER.has(event) ? null : (
-                            <Field label="Matcher" hint="Tool-name pattern, e.g. Bash or Edit|Write. Empty matches all.">
-                              <TextInput
-                                mono
-                                value={typeof group.matcher === 'string' ? group.matcher : ''}
-                                onChange={(matcher) => updateGroup(event, index, { matcher })}
-                                aria-label={`${event} matcher`}
-                              />
-                            </Field>
-                          )}
-                          {isSimpleCommandGroup(group) ? (
-                            <Field label="Command">
-                              <TextInput
-                                mono
-                                value={(group.hooks![0] as { command: string }).command}
-                                onChange={(command) =>
-                                  updateGroup(event, index, {
-                                    hooks: [{ ...(group.hooks![0] as object), command }],
-                                  })
-                                }
-                                aria-label={`${event} command`}
-                              />
-                            </Field>
-                          ) : (
-                            <Field
-                              label="Handlers"
-                              hint="This group is more than one plain command — edit it in the JSON view."
-                            >
-                              <pre className="overflow-x-auto hand-sm-2 bg-code-bg p-2 font-mono text-xs text-text-muted">
-                                {JSON.stringify(group.hooks, null, 2)}
-                              </pre>
-                            </Field>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeGroup(event, index)}
-                          aria-label={`Remove ${event} hook`}
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </section>
-            ))
+                      event={info}
+                      group={raw as Group}
+                      onChange={(next) => updateGroup(event, index, next)}
+                      onRemove={() => removeGroup(event, index)}
+                    />
+                  ))}
+                </section>
+              )
+            })
           )}
 
-          <div className="flex items-center gap-2 border-t border-line pt-3">
-            <div className="w-52">
-              <Select
-                aria-label="Hook event"
-                value={addingEvent}
-                onChange={setAddingEvent}
-                options={HOOK_EVENTS.map((event) => ({ value: event, label: event }))}
-                className="h-8 text-xs"
-              />
-            </div>
-            <Button variant="subtle" size="sm" onClick={addGroup}>
-              <Plus size={12} /> Add hook
-            </Button>
+          <div className="border-t border-line pt-3">
+            <HookEventPicker onPick={addGroup} />
           </div>
         </>
       )}
