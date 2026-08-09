@@ -2,8 +2,11 @@ import { create } from 'zustand'
 import type { ReviewFile } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { useSessionStore } from './sessionStore'
+// One-directional: workspaceStore never imports from here.
+import { useWorkspaceStore } from './workspaceStore'
 
 const PERSIST_KEY = 'claudeview.review.comments.v1'
+const VIEWED_KEY = 'claudeview.review.viewed.v1'
 /** Excerpts are a reminder of *which* line, not a copy of it. */
 const EXCERPT_MAX = 80
 
@@ -40,6 +43,13 @@ type ReviewState = {
   comments: ReviewComment[]
   /** False until the first `review:list` lands, so the empty state isn't a flash. */
   loaded: boolean
+  /**
+   * When each file was last looked at, keyed by absolute path. A file whose
+   * `lastChangedAt` is newer than its stamp is *unviewed* — the signal that
+   * feeds the tree dots and the toolbar badge. Persisted, because "which of
+   * these have I already read" is exactly the state a restart must not reset.
+   */
+  viewedAt: Record<string, number>
 
   /** Apply one push (or the initial list). The whole set, never a delta. */
   setFiles: (files: ReviewFile[]) => void
@@ -70,6 +80,29 @@ function persist(comments: ReviewComment[]): ReviewComment[] {
   }
   return comments
 }
+
+function persistViewed(viewedAt: Record<string, number>): Record<string, number> {
+  try {
+    localStorage.setItem(VIEWED_KEY, JSON.stringify(viewedAt))
+  } catch {
+    // Same policy as comments: viewing state is never worth an exception.
+  }
+  return viewedAt
+}
+
+function loadViewed(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(VIEWED_KEY)
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, number>) : {}
+  } catch {
+    return {}
+  }
+}
+
+export const isUnviewed = (file: ReviewFile, viewedAt: Record<string, number>): boolean =>
+  file.lastChangedAt > (viewedAt[file.path] ?? 0)
 
 function loadPersisted(): ReviewComment[] {
   try {
@@ -149,15 +182,30 @@ export const useReviewStore = create<ReviewState>()((setState, getState) => ({
   activePath: null,
   comments: loadPersisted(),
   loaded: false,
+  viewedAt: loadViewed(),
 
   setFiles: (files) =>
-    setState((state) => ({
-      files,
-      loaded: true,
-      activePath: resolveActive(files, state.activePath),
-    })),
+    setState((state) => {
+      const activePath = resolveActive(files, state.activePath)
+      /*
+       * A push that lands while the active file is on screen counts as viewing
+       * it — you're literally watching the change arrive. But only when review
+       * mode is actually showing: in panels mode the surface is hidden, and
+       * stamping there would silently mark files read that nobody has seen.
+       */
+      const reviewing = useWorkspaceStore.getState().mode === 'review'
+      const viewedAt =
+        reviewing && activePath
+          ? persistViewed({ ...state.viewedAt, [activePath]: Date.now() })
+          : state.viewedAt
+      return { files, loaded: true, activePath, viewedAt }
+    }),
 
-  setActivePath: (path) => setState({ activePath: path }),
+  setActivePath: (path) =>
+    setState((state) => ({
+      activePath: path,
+      viewedAt: persistViewed({ ...state.viewedAt, [path]: Date.now() }),
+    })),
 
   addComment: (input) =>
     setState((state) => ({

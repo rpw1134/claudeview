@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { ArrowUpRight } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Field'
+import { useWorkspaceStore } from '@/stores/workspaceStore'
 
 /**
  * The top strip: what's in the set, where the feedback goes, and the one action.
@@ -61,13 +63,35 @@ export function ReviewHeader({
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {sessions.length > 0 ? (
-          <Select
-            aria-label="Send comments to"
-            value={targetTabId ?? sessions[0]!.id}
-            onChange={onTargetChange}
-            options={sessions.map((session) => ({ value: session.id, label: session.title }))}
-            className="h-8 w-48 text-xs"
-          />
+          <>
+            <Select
+              aria-label="Send comments to"
+              value={targetTabId ?? sessions[0]!.id}
+              onChange={onTargetChange}
+              options={sessions.map((session) => ({ value: session.id, label: session.title }))}
+              className="h-8 w-48 text-xs"
+            />
+            {/* The round trip's other half: send, then go watch the agent work.
+                Jumps to the target session's panel — without this, following up
+                on your own feedback takes ⌥R plus hunting for the right panel. */}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Go to this session"
+              title="Go to session"
+              onClick={() => {
+                const workspace = useWorkspaceStore.getState()
+                const tabId = targetTabId ?? sessions[0]!.id
+                const panel = workspace.panels.find(
+                  (entry) => entry.kind === 'session' && entry.refId === tabId,
+                )
+                if (panel) workspace.focusPanel(panel.id, true)
+                if (workspace.mode === 'review') workspace.toggleMode()
+              }}
+            >
+              <ArrowUpRight size={14} />
+            </Button>
+          </>
         ) : null}
 
         {/*

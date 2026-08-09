@@ -17,6 +17,7 @@ export function DirChildren({
   activePath,
   isCollapsed,
   unresolvedFor,
+  isUnviewed,
   onToggle,
   onSelect,
 }: {
@@ -26,6 +27,8 @@ export function DirChildren({
   /** Root-qualified by the caller, so two roots can't share collapsed state. */
   isCollapsed: (path: string) => boolean
   unresolvedFor: (path: string) => number
+  /** Changed since last opened here — drives the solid-vs-faint dot. */
+  isUnviewed: (file: ReviewFile) => boolean
   onToggle: (path: string) => void
   onSelect: (path: string) => void
 }) {
@@ -61,6 +64,7 @@ export function DirChildren({
                 activePath={activePath}
                 isCollapsed={isCollapsed}
                 unresolvedFor={unresolvedFor}
+                isUnviewed={isUnviewed}
                 onToggle={onToggle}
                 onSelect={onSelect}
               />
@@ -76,6 +80,7 @@ export function DirChildren({
           depth={depth}
           active={file.path === activePath}
           unresolved={unresolvedFor(file.path)}
+          unviewed={isUnviewed(file)}
           onSelect={() => onSelect(file.path)}
         />
       ))}
@@ -88,12 +93,14 @@ function FileRow({
   depth,
   active,
   unresolved,
+  unviewed,
   onSelect,
 }: {
   file: ReviewFile
   depth: number
   active: boolean
   unresolved: number
+  unviewed: boolean
   onSelect: () => void
 }) {
   const name = file.relPath.slice(file.relPath.lastIndexOf('/') + 1)
@@ -110,19 +117,26 @@ function FileRow({
         active ? 'bg-accent-wash' : 'hover:bg-surface',
       )}
     >
-      {/* Tracked, at a glance. Deletion is carried by the name's colour *and* by
-          the pane's "This file was deleted." — never by hue alone. */}
+      {/* The dot answers "have I read this since it last changed": solid accent
+          until opened, then faint — the same read/unread convention as an inbox.
+          Colour is never the only carrier: an unviewed name also sits at full
+          text weight below. Deletion overrides in danger, paired with the
+          pane's "This file was deleted." */}
       <span
         className={cn(
           'h-1.5 w-1.5 shrink-0 rounded-full',
-          file.deleted ? 'bg-danger' : 'bg-accent',
+          file.deleted ? 'bg-danger' : unviewed ? 'bg-accent' : 'bg-line-strong',
         )}
         aria-hidden
       />
       <span
         className={cn(
           'min-w-0 flex-1 truncate text-xs',
-          file.deleted ? 'text-danger line-through' : active ? 'text-text' : 'text-text-muted',
+          file.deleted
+            ? 'text-danger line-through'
+            : active || unviewed
+              ? 'text-text'
+              : 'text-text-muted',
         )}
       >
         {name}

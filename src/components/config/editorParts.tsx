@@ -48,7 +48,18 @@ export function EditorHeader({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to list">
+      <Button
+        variant="ghost"
+        size="icon"
+        // The one navigation that can silently discard work, so it's the one
+        // that asks. Save is a click away; losing ten minutes of prompt-writing
+        // to a misclick is not recoverable the same way.
+        onClick={() => {
+          if (dirty && !window.confirm('Discard unsaved changes?')) return
+          onBack()
+        }}
+        aria-label="Back to list"
+      >
         <ArrowLeft size={13} />
       </Button>
       <span className="truncate font-mono text-sm text-text">{title}</span>

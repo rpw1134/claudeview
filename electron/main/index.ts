@@ -159,6 +159,10 @@ app.on('window-all-closed', () => {
  */
 let shuttingDown = false
 app.on('before-quit', (event) => {
+  // Unconditional and first: the early return just below skips the rest of
+  // this handler whenever there's nothing live to tear down, but a debounced
+  // review save can still be pending even with zero sessions/terminals open.
+  review.flush()
   if (shuttingDown || (sessions.size === 0 && terminals.size === 0)) return
   event.preventDefault()
   shuttingDown = true

@@ -9,8 +9,10 @@ import {
   SquareTerminal,
 } from 'lucide-react'
 import { MAX_PANELS } from '@/stores/workspaceStore'
+import { isUnviewed, useReviewStore } from '@/stores/reviewStore'
 import type { SplitDirection } from '@/lib/layoutTree'
 import { Button } from './ui/Button'
+import { cn } from '@/lib/utils'
 
 /**
  * Window toolbar: add panels, tidy the layout, open settings.
@@ -118,17 +120,7 @@ export function WorkspaceBar({
       {/* Visible from every surface, like the config toggle: both mode switches
           must be reachable by click from anywhere, or config becomes a dead end
           you can only leave by the key you may not know. */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onToggleReview}
-        aria-label={reviewActive ? 'Back to panels' : 'Review mode'}
-        aria-pressed={reviewActive}
-        title="Review — ⌥R"
-        className={reviewActive ? 'bg-accent-wash text-accent' : undefined}
-      >
-        <GitPullRequestArrow size={15} />
-      </Button>
+      <ReviewToggle active={reviewActive} onToggle={onToggleReview} />
 
       {configActive ? null : (
         <>
@@ -196,4 +188,48 @@ export function WorkspaceBar({
 
 function Divider() {
   return <div className="mx-1.5 h-4 w-px bg-line" aria-hidden />
+}
+
+/**
+ * The review toggle carries a live file count, because review's whole premise is
+ * that changes accumulate while you're looking elsewhere — a queue nothing
+ * announces is a queue nobody opens. The count is total tracked files; it takes
+ * the accent only while some of them are *unviewed*, so a queue you've already
+ * read through stops asking for attention without pretending to be empty.
+ */
+function ReviewToggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  const fileCount = useReviewStore((state) => state.files.length)
+  const hasUnviewed = useReviewStore((state) =>
+    state.files.some((file) => isUnviewed(file, state.viewedAt)),
+  )
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onToggle}
+      aria-label={
+        active
+          ? 'Back to panels'
+          : `Review mode${fileCount > 0 ? ` — ${fileCount} changed file${fileCount === 1 ? '' : 's'}` : ''}`
+      }
+      aria-pressed={active}
+      title="Review — ⌥R"
+      className={cn('relative', active && 'bg-accent-wash text-accent')}
+    >
+      <GitPullRequestArrow size={15} />
+      {fileCount > 0 ? (
+        <span
+          className={cn(
+            'absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center',
+            'rounded-full px-0.5 text-[9px] font-medium leading-none tabular-nums',
+            hasUnviewed ? 'bg-accent text-accent-contrast' : 'bg-raised text-text-faint',
+          )}
+          aria-hidden
+        >
+          {fileCount > 99 ? '99+' : fileCount}
+        </span>
+      ) : null}
+    </Button>
+  )
 }

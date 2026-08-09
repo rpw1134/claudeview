@@ -125,7 +125,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       id: panelId,
       kind,
       refId,
-      title: options.title ?? (kind === 'terminal' ? 'Terminal' : 'New session'),
+      // A terminal is named for where it is — with several open, "Terminal,
+      // Terminal, Terminal" makes the titles pure decoration.
+      title:
+        options.title ??
+        (kind === 'terminal'
+          ? options.cwd
+            ? (options.cwd.split('/').filter(Boolean).pop() ?? 'Terminal')
+            : 'Terminal'
+          : 'New session'),
       cwd: options.cwd,
     }
 

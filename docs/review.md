@@ -53,6 +53,15 @@ file snapshots it afresh, so "reviewed and accepted" means the next diff starts 
 what you accepted rather than replaying changes you already read. Nothing on disk is
 touched.
 
+### Viewed and unviewed
+
+Each file remembers when you last opened it in review. A file whose latest change is
+newer than that shows a solid accent dot and a full-weight name in the rail — the
+inbox convention — and settles to faint once opened. The toolbar's review button
+carries the tracked-file count from every surface, accent-filled while anything is
+unviewed, so a queue growing behind a session panel is never silent. Viewing state
+persists across restarts.
+
 ## The comment workflow
 
 1. **Pick a file** in the rail. Files are grouped by workspace root (headed only when

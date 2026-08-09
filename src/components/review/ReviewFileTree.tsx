@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { ReviewFile } from '@shared/ipc'
 import { Button } from '@/components/ui/Button'
+import { isUnviewed, useReviewStore } from '@/stores/reviewStore'
 import { shortenPath } from '@/lib/utils'
 import { buildTree } from './fileTree'
 import { DirChildren } from './ReviewTreeNode'
@@ -32,6 +33,7 @@ export function ReviewFileTree({
   onDismissAll: () => void
 }) {
   const groups = useMemo(() => buildTree(files), [files])
+  const viewedAt = useReviewStore((state) => state.viewedAt)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [confirming, setConfirming] = useState(false)
 
@@ -66,6 +68,7 @@ export function ReviewFileTree({
               isCollapsed={(path) => collapsed.has(`${root}::${path}`)}
               onToggle={(path) => toggle(`${root}::${path}`)}
               unresolvedFor={unresolvedFor}
+              isUnviewed={(file) => isUnviewed(file, viewedAt)}
               onSelect={onSelect}
             />
           </div>

@@ -1,4 +1,6 @@
+import { app } from 'electron'
 import type { WebContents } from 'electron'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -6,6 +8,57 @@ import type { ReviewEnvelope, ReviewFile, ReviewLineMark, StreamEvent } from '..
 import { REVIEW_CHANNEL } from '../../../shared/ipc'
 import { lineDiff } from '../../../shared/lineDiff'
 import { isGitRepo, showHead, statusPorcelain } from './git'
+
+/**
+ * Where the review set survives a restart.
+ *
+ * `state.json` holds everything small and structured; baseline *contents* do
+ * not belong in it (they can be megabytes and there can be hundreds of them),
+ * so each gets its own file under `baselines/`, named by a hash of the
+ * absolute path so renames of the JSON never orphan a blob silently.
+ */
+const REVIEW_DIR = path.join(app.getPath('userData'), 'review')
+const STATE_FILE = path.join(REVIEW_DIR, 'state.json')
+const BASELINES_DIR = path.join(REVIEW_DIR, 'baselines')
+
+/** Debounce window between a mutation and the write that persists it. */
+const SAVE_DEBOUNCE_MS = 500
+
+function baselineFilePath(target: string): string {
+  const hash = crypto.createHash('sha1').update(target).digest('hex')
+  return path.join(BASELINES_DIR, `${hash}.baseline`)
+}
+
+/**
+ * On-disk shape of one entry. Deliberately not `Entry` itself: `baseline`
+ * collapses to a tag rather than carrying content (that lives in its own
+ * file), and `deleted`/`size`/`mtimeMs` are plain data with no class behind
+ * them once they cross to JSON.
+ */
+type PersistedEntry = {
+  path: string
+  relPath: string
+  root: string
+  tabId?: string
+  firstTouchedAt: number
+  lastChangedAt: number
+  deleted: boolean
+  /**
+   * 'none' — the file didn't exist at first touch (it was created); there is
+   * no baseline file to read.
+   * 'stored' — baseline content lives in `baselines/`.
+   * 'unknown' — capture failed (too large / unreadable) and marks were
+   * already suppressed for this file before the restart.
+   */
+  baseline: 'none' | 'stored' | 'unknown'
+  size: number
+  mtimeMs: number
+}
+
+type PersistedState = {
+  version: 1
+  entries: PersistedEntry[]
+}
 
 /** Tools whose input names a file they are about to write. */
 const WRITING_TOOLS = new Map<string, 'file_path' | 'notebook_path'>([
@@ -66,10 +119,13 @@ type Entry = {
  *
  * ## Lifetime
  *
- * The set outlives its session — you review after the agent stops — but not the
- * app. Persisting baselines across restarts would mean owning a cache whose
- * entries silently go stale against a moving working tree; a restart is a clean,
- * comprehensible reset.
+ * The set outlives its session — you review after the agent stops — and, since
+ * a restart mid-review would otherwise empty the queue out from under you, it
+ * now outlives the app too. The risk of a persisted cache going stale against
+ * a moving working tree is handled the same way `read()` already handles a
+ * live file going stale: staleness is detected on demand (marks are diffed
+ * against the current disk contents every time, and a missing file is caught
+ * on load), never assumed correct just because it was loaded from disk.
  */
 export class ReviewTracker {
   private readonly entries = new Map<string, Entry>()
@@ -78,12 +134,19 @@ export class ReviewTracker {
   private timer: NodeJS.Timeout | null = null
   private polling = false
   private seq = 0
+  private saveTimer: NodeJS.Timeout | null = null
 
   constructor(
     private readonly getWebContents: () => WebContents | null,
     /** Distinct cwds of live sessions. Empty means there is nothing to poll. */
     private readonly liveRoots: () => string[],
-  ) {}
+  ) {
+    // Fire-and-forget: `list()`/`read()` simply see an empty set until this
+    // resolves, same as any other cold start. `push()` at the end is what lets
+    // the renderer (which mounts after main, so it's always listening by then)
+    // pick up whatever survived the restart.
+    void this.load().then(() => this.push())
+  }
 
   /** Begin the git backstop poll. Idempotent. */
   start(): void {
@@ -96,6 +159,13 @@ export class ReviewTracker {
   dispose(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    // Drop the pending debounce rather than let it fire later: by the time
+    // dispose() runs, `entries` is about to be cleared, and a save landing
+    // after that would overwrite good on-disk state with an empty set.
+    // `flush()` is what's expected to have run first if the caller wants the
+    // current set persisted (see index.ts's before-quit handler).
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = null
     this.entries.clear()
     this.repoChecks.clear()
   }
@@ -180,14 +250,33 @@ export class ReviewTracker {
    */
   dismiss(paths: string[]): void {
     let changed = false
-    for (const target of paths) changed = this.entries.delete(target) || changed
+    for (const target of paths) {
+      if (!this.entries.delete(target)) continue
+      changed = true
+      removeBaselineFile(target)
+    }
     if (changed) this.push()
   }
 
   dismissAll(): void {
     if (this.entries.size === 0) return
+    for (const target of this.entries.keys()) removeBaselineFile(target)
     this.entries.clear()
     this.push()
+  }
+
+  /**
+   * Write the current set to disk right now, bypassing the debounce.
+   *
+   * Called from index.ts's shutdown path. Sync rather than the usual
+   * `fsp`-based save: `before-quit` gives no guarantee an in-flight promise
+   * gets to finish before the process exits, and losing the review set on
+   * every quit is exactly the bug this class exists to fix.
+   */
+  flush(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = null
+    writeStateSync([...this.entries.values()])
   }
 
   /**
@@ -220,6 +309,10 @@ export class ReviewTracker {
       size: snapshot.size,
       mtimeMs: snapshot.mtimeMs,
     })
+    // Content is already in hand from the sync read above, so persisting it is
+    // just a write, not a second read racing the edit — safe to do here rather
+    // than deferring to the debounced save.
+    if (snapshot.known && snapshot.content !== null) writeBaselineFileSync(target, snapshot.content)
     return true
   }
 
@@ -310,6 +403,7 @@ export class ReviewTracker {
       size: stat?.size ?? 0,
       mtimeMs: stat?.mtimeMs ?? 0,
     })
+    if (baseline !== null) writeBaselineFileSync(target, baseline)
   }
 
   private isRepo(root: string): Promise<boolean> {
@@ -324,13 +418,184 @@ export class ReviewTracker {
   /**
    * Push the whole set. Guarded the same way session pushes are: teardown is
    * async, and a poll can land after the window is gone.
+   *
+   * Every call site that mutates `entries` calls this, which makes it the one
+   * place to also schedule a save — there is no separate list of "the events
+   * that need persisting" to keep in sync with reality.
    */
   private push(): void {
+    this.scheduleSave()
     const contents = this.getWebContents()
     if (!contents || contents.isDestroyed()) return
     this.seq += 1
     const envelope: ReviewEnvelope = { seq: this.seq, files: this.list() }
     contents.send(REVIEW_CHANNEL, envelope)
+  }
+
+  /** Debounce writes so a burst of touches (a multi-file edit turn) is one save. */
+  private scheduleSave(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null
+      void writeState([...this.entries.values()])
+    }, SAVE_DEBOUNCE_MS)
+    this.saveTimer.unref?.()
+  }
+
+  /**
+   * Rebuild `entries` from disk. Every failure — missing dir, corrupt JSON, a
+   * `state.json` entry whose baseline file is gone — drops just that entry (or
+   * the whole file) rather than throwing: a partially-recovered review set is
+   * fine, a startup crash over a stale cache file is not.
+   */
+  private async load(): Promise<void> {
+    let raw: string
+    try {
+      raw = await fsp.readFile(STATE_FILE, 'utf8')
+    } catch {
+      return
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return
+    }
+    if (!parsed || typeof parsed !== 'object') return
+    const record = parsed as Record<string, unknown>
+    if (!Array.isArray(record.entries)) return
+
+    for (const raw of record.entries as unknown[]) {
+      const entry = await reviveEntry(raw)
+      if (entry) this.entries.set(entry.file.path, entry)
+    }
+  }
+}
+
+/** Shared shape between the async and sync save paths. */
+function toPersisted(entry: Entry): PersistedEntry {
+  return {
+    path: entry.file.path,
+    relPath: entry.file.relPath,
+    root: entry.file.root,
+    tabId: entry.file.tabId,
+    firstTouchedAt: entry.file.firstTouchedAt,
+    lastChangedAt: entry.file.lastChangedAt,
+    deleted: entry.file.deleted,
+    baseline: entry.baseline === null ? 'none' : entry.baselineKnown ? 'stored' : 'unknown',
+    size: entry.size,
+    mtimeMs: entry.mtimeMs,
+  }
+}
+
+/**
+ * Write `state.json` for the debounced path. Temp-then-rename so a crash or a
+ * quit racing this write never leaves a half-written, unparseable file behind
+ * — `load()` would otherwise drop the *entire* set over one torn write.
+ */
+async function writeState(entries: Entry[]): Promise<void> {
+  const payload: PersistedState = { version: 1, entries: entries.map(toPersisted) }
+  try {
+    await fsp.mkdir(REVIEW_DIR, { recursive: true })
+    const tmp = `${STATE_FILE}.tmp`
+    await fsp.writeFile(tmp, JSON.stringify(payload), 'utf8')
+    await fsp.rename(tmp, STATE_FILE)
+  } catch {
+    // Best-effort: a failed save just means a restart replays fewer files,
+    // never worth crashing or surfacing to the user over.
+  }
+}
+
+/** Same contract as {@link writeState}, blocking, for the quit path. */
+function writeStateSync(entries: Entry[]): void {
+  const payload: PersistedState = { version: 1, entries: entries.map(toPersisted) }
+  try {
+    fs.mkdirSync(REVIEW_DIR, { recursive: true })
+    const tmp = `${STATE_FILE}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify(payload), 'utf8')
+    fs.renameSync(tmp, STATE_FILE)
+  } catch {
+    // Same tolerance as writeState — quit must never hang or throw over this.
+  }
+}
+
+/** Blocking baseline write. See `readSnapshot`: the content is already in hand. */
+function writeBaselineFileSync(target: string, content: string): void {
+  try {
+    fs.mkdirSync(BASELINES_DIR, { recursive: true })
+    fs.writeFileSync(baselineFilePath(target), content, 'utf8')
+  } catch {
+    // Best-effort. The in-memory baseline still serves this session either way.
+  }
+}
+
+function removeBaselineFile(target: string): void {
+  try {
+    fs.unlinkSync(baselineFilePath(target))
+  } catch {
+    // Already gone, or never written (e.g. a `baseline: null` entry) — fine.
+  }
+}
+
+/**
+ * Reconstruct one `Entry` from its persisted form, or `null` to drop it.
+ *
+ * A dropped entry isn't a bug report: the next time the agent (or a manual
+ * poll) touches that path it gets re-added with a fresh baseline, same as any
+ * other new file. Silently losing a stale entry is strictly better than
+ * showing a diff that can no longer be trusted.
+ */
+async function reviveEntry(raw: unknown): Promise<Entry | null> {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+
+  if (typeof r.path !== 'string' || typeof r.relPath !== 'string' || typeof r.root !== 'string') {
+    return null
+  }
+  if (typeof r.firstTouchedAt !== 'number' || typeof r.lastChangedAt !== 'number') return null
+  if (r.baseline !== 'none' && r.baseline !== 'stored' && r.baseline !== 'unknown') return null
+
+  let baseline: string | null = null
+  let baselineKnown = false
+  if (r.baseline === 'none') {
+    baselineKnown = true
+  } else if (r.baseline === 'stored') {
+    try {
+      baseline = await fsp.readFile(baselineFilePath(r.path), 'utf8')
+      baselineKnown = true
+    } catch {
+      // Promised on disk, not actually there — drop the entry rather than
+      // show marks (or no marks) that don't reflect a real baseline.
+      return null
+    }
+  }
+  // else 'unknown': baselineKnown stays false, matching the pre-restart state
+  // where capture had already failed and marks were suppressed.
+
+  // Requirement is existence only, not a full restat: `deleted` flips false ->
+  // true for a file that vanished while the app was closed, but a file that's
+  // merely changed is left alone — the next `review:file` / poll recomputes
+  // marks and mtimes on its own schedule, not eagerly here.
+  const gone = statOrNull(r.path) === null
+  const tabId = typeof r.tabId === 'string' ? r.tabId : undefined
+  const size = typeof r.size === 'number' ? r.size : 0
+  const mtimeMs = typeof r.mtimeMs === 'number' ? r.mtimeMs : 0
+
+  return {
+    file: {
+      path: r.path,
+      relPath: r.relPath,
+      root: r.root,
+      tabId,
+      firstTouchedAt: r.firstTouchedAt,
+      lastChangedAt: r.lastChangedAt,
+      deleted: gone ? true : Boolean(r.deleted),
+    },
+    baseline,
+    baselineKnown,
+    size,
+    mtimeMs,
   }
 }
 
