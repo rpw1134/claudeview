@@ -53,6 +53,13 @@ type WorkspaceState = {
    * back to the same panel re-focuses rather than being a no-op.
    */
   autoFocusToken: number
+  /**
+   * Which activity the workspace surface shows: the panel mosaic, or review.
+   * Distinct from the `view` state in App.tsx — that swaps the *whole window*
+   * between workspace and config, while `mode` swaps what fills the workspace
+   * half of that split. Panels stay mounted underneath either way.
+   */
+  mode: 'panels' | 'review'
 
   /**
    * Focus a panel. `viaKeyboard` additionally bumps `autoFocusToken`, which is what
@@ -62,6 +69,7 @@ type WorkspaceState = {
   focusPanel: (panelId: string, viaKeyboard?: boolean) => void
   /** Move focus to the next/previous panel in visual order. */
   cyclePanel: (delta: 1 | -1) => void
+  toggleMode: () => void
   addPanel: (
     kind: PanelKind,
     options?: { cwd?: string; resume?: string; title?: string; direction?: SplitDirection },
@@ -84,6 +92,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
   focusedPanelId: null,
   draggingPanelId: null,
   autoFocusToken: 0,
+  mode: 'panels',
+
+  toggleMode: () =>
+    setState((state) => ({ mode: state.mode === 'panels' ? 'review' : 'panels' })),
 
   focusPanel: (panelId, viaKeyboard = false) =>
     setState((state) => ({
@@ -202,4 +214,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
 export function selectFocusedPanel(state: WorkspaceState): Panel | null {
   if (state.panels.length === 0) return null
   return state.panels.find((panel) => panel.id === state.focusedPanelId) ?? state.panels[0]!
+}
+
+/** A panel's 1-indexed position in visual order, for the header's number label. */
+export function selectPanelNumber(panelId: string) {
+  return (state: WorkspaceState): number => collectPanelIds(state.layout).indexOf(panelId) + 1
 }

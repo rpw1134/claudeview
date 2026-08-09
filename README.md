@@ -77,15 +77,15 @@ npm run dev
 | `Enter`        | Send message               |
 | `Shift+Enter`  | Newline                    |
 | `Esc`          | Stop the current turn      |
-| `⌘T` / `⌥T`    | New session (thread) panel |
-| `⇧⌘T` / `⌥C`   | New terminal (console) panel |
-| `⌥K`           | Toggle the Claude config view (agents, skills, hooks) |
-| `⌥A`           | Split vertically (new panel right, same kind as focused) |
-| `⌥S`           | Split horizontally (new panel below, same kind as focused) |
-| `⌘W` / `Ctrl+W`| Close the focused panel    |
-| `⌥Tab` / `Ctrl+Tab` | Cycle panels (`⇧` reverses) |
+| `⌥T`           | New session (thread) panel |
+| `⌥C`           | New terminal (console) panel |
+| `⌥A`           | Split right (new panel, same kind as focused) |
+| `⌥S`           | Split down (new panel, same kind as focused) |
 | `⌥1`–`⌥8`      | Focus panel by visual position (left-to-right, top-to-bottom) |
-| `⌘1`–`⌘9`      | Focus panel by creation order |
+| `⌥Tab` / `Ctrl+Tab` | Cycle panels (`⇧` reverses) |
+| `⌥W` / `⌘W` / `Ctrl+W` | Close the focused panel |
+| `⌥K`           | Toggle the Claude config view (agents, skills, hooks) |
+| `⌥R`           | Toggle review mode          |
 | `⌘,`           | Appearance settings        |
 
 ## How it fits together

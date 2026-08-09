@@ -9,6 +9,7 @@ import { PanelMosaic } from '@/components/PanelMosaic'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { NewSessionPanel } from '@/components/NewSessionPanel'
 import { ConfigPanel } from '@/components/config/ConfigPanel'
+import { ReviewView } from '@/components/review/ReviewView'
 
 export function App() {
   // One IPC subscription for the whole app. See the hook for why it must be here.
@@ -18,7 +19,8 @@ export function App() {
   const layout = useWorkspaceStore((state) => state.layout)
   const focusedPanelId = useWorkspaceStore((state) => state.focusedPanelId)
   const autoFocusToken = useWorkspaceStore((state) => state.autoFocusToken)
-  const { focusPanel, cyclePanel, addPanel, closePanel, balanceLayout } =
+  const mode = useWorkspaceStore((state) => state.mode)
+  const { focusPanel, cyclePanel, addPanel, closePanel, balanceLayout, toggleMode } =
     useWorkspaceStore.getState()
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -68,9 +70,20 @@ export function App() {
       const alt = event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey
 
       // The config view toggle works from either surface — command or button,
-      // in both directions.
+      // in both directions — and from either workspace mode.
       if (alt && event.code === 'KeyK') {
         claim(event, toggleConfig)
+        return
+      }
+
+      // Review is a workspace mode, not a view, but the command still needs to
+      // reach it from config: switch the view back to workspace on the way in,
+      // same as pressing the toolbar's config button would.
+      if (alt && event.code === 'KeyR') {
+        claim(event, () => {
+          toggleMode()
+          if (view === 'config') setView('workspace')
+        })
         return
       }
 
@@ -80,10 +93,11 @@ export function App() {
         return
       }
 
-      // Everything below acts on panels. While config fills the window the
-      // workspace isn't visible, and a shortcut that mutates an invisible
-      // surface is a trap — so they're inert until you switch back.
-      if (view === 'config') return
+      // Everything below acts on panels. While config fills the window, or
+      // review mode has replaced the mosaic, the panel surface isn't visible,
+      // and a shortcut that mutates an invisible surface is a trap — so they're
+      // inert until you switch back.
+      if (view === 'config' || mode === 'review') return
 
       // Panel cycling. Alt+Tab is free inside the window on macOS (the system
       // uses Cmd+Tab); Ctrl+Tab is accepted too since it's the conventional
@@ -101,8 +115,7 @@ export function App() {
       if (alt) {
         const digit = /^Digit([1-8])$/.exec(event.code)
         if (digit) {
-          // Visual order — left to right, top to bottom — same as panel cycling,
-          // unlike Cmd+number which follows creation order.
+          // Visual order — left to right, top to bottom — same as panel cycling.
           const target = collectPanelIds(layout)[Number(digit[1]) - 1]
           if (target) claim(event, () => focusPanel(target, true))
           return
@@ -116,28 +129,34 @@ export function App() {
           KeyC: () => void addPanel('terminal'),
           KeyA: () => void addPanel(focusedKind, { direction: 'row' }),
           KeyS: () => void addPanel(focusedKind, { direction: 'column' }),
+          KeyW: focusedPanelId ? () => void closePanel(focusedPanelId) : undefined,
         }
         const run = command[event.code]
         if (run) claim(event, run)
         return
       }
 
-      if (!accel) return
-
-      if (event.key === 't') {
-        claim(event, () => void addPanel(event.shiftKey ? 'terminal' : 'session'))
-      } else if (event.key === 'w' && focusedPanelId) {
+      // Cmd+W / Ctrl+W: platform convention for "close the current thing",
+      // kept alongside Opt+W rather than replaced by it.
+      if (accel && event.key === 'w' && focusedPanelId) {
         claim(event, () => void closePanel(focusedPanelId))
-      } else if (/^[1-9]$/.test(event.key)) {
-        const target = panels[Number(event.key) - 1]
-        if (target) claim(event, () => focusPanel(target.id, true))
       }
     }
 
     // Capture phase, so shortcuts are seen before xterm's own key handling.
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [panels, layout, focusedPanelId, view, addPanel, closePanel, focusPanel, cyclePanel])
+  }, [
+    layout,
+    focusedPanelId,
+    view,
+    mode,
+    addPanel,
+    closePanel,
+    focusPanel,
+    cyclePanel,
+    toggleMode,
+  ])
 
   /*
    * Swallow file drops that miss a composer.
@@ -171,17 +190,30 @@ export function App() {
       <WorkspaceBar
         panelCount={panels.length}
         configActive={view === 'config'}
+        reviewActive={mode === 'review'}
         onAddSession={(direction) => void addPanel('session', { direction })}
         onAddTerminal={(direction) => void addPanel('terminal', { direction })}
         onToggleConfig={toggleConfig}
+        onToggleReview={() => {
+          // Mirror the ⌥R shortcut exactly: entering review from config also
+          // brings the workspace back, or the toggle would flip an invisible mode.
+          toggleMode()
+          if (view === 'config') setView('workspace')
+        }}
         onBalance={balanceLayout}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      {/* Both surfaces stay mounted; `hidden` swaps which one shows. Unmounting
-          the workspace would tear down every terminal's emulator, and unmounting
-          config would drop an in-progress edit. */}
-      <div className={cn('flex min-h-0 flex-1 flex-col', view === 'config' && 'hidden')}>
+      {/* All three surfaces stay mounted; `hidden` swaps which one shows.
+          Unmounting the mosaic would tear down every terminal's emulator,
+          unmounting config would drop an in-progress edit, and review gets the
+          same treatment for consistency even though it has nothing to lose yet. */}
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          (view === 'config' || mode === 'review') && 'hidden',
+        )}
+      >
         {panels.length === 0 ? (
           <NewSessionPanel
             home={home}
@@ -200,6 +232,15 @@ export function App() {
             onClose={(panelId) => void closePanel(panelId)}
           />
         )}
+      </div>
+
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          (view === 'config' || mode !== 'review') && 'hidden',
+        )}
+      >
+        <ReviewView />
       </div>
 
       {configMounted ? (

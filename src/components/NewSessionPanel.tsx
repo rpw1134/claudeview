@@ -164,7 +164,7 @@ export function NewSessionPanel({
         </div>
 
         <p className="mt-3 text-xs text-text-faint">
-          ⌥T new session · ⌥C new terminal · ⌥A / ⌥S split · ⌥Tab switch · ⌥K config
+          ⌥T new session · ⌥C new terminal · ⌥A / ⌥S split · ⌥Tab switch · ⌥K config · ⌥R review
         </p>
 
         <section className="mt-14">

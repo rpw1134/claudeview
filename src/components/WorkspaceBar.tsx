@@ -1,5 +1,6 @@
 import {
   Columns2,
+  GitPullRequestArrow,
   LayoutGrid,
   MessageSquarePlus,
   Rows2,
@@ -44,17 +45,21 @@ import { Button } from './ui/Button'
 export function WorkspaceBar({
   panelCount,
   configActive,
+  reviewActive,
   onAddSession,
   onAddTerminal,
   onToggleConfig,
+  onToggleReview,
   onBalance,
   onOpenSettings,
 }: {
   panelCount: number
   configActive: boolean
+  reviewActive: boolean
   onAddSession: (direction: SplitDirection) => void
   onAddTerminal: (direction: SplitDirection) => void
   onToggleConfig: () => void
+  onToggleReview: () => void
   onBalance: () => void
   onOpenSettings: () => void
 }) {
@@ -67,26 +72,35 @@ export function WorkspaceBar({
       // control lands on the same vertical line as the content below it.
       className="flex h-12 shrink-0 items-center justify-end gap-0.5 pr-12"
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onAddSession('row')}
-        disabled={atCapacity}
-        aria-label="New session panel"
-        title="New session — ⌘T / ⌥T"
-      >
-        <MessageSquarePlus size={15} />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onAddTerminal('row')}
-        disabled={atCapacity}
-        aria-label="New terminal panel"
-        title="New terminal — ⇧⌘T / ⌥C"
-      >
-        <SquareTerminal size={15} />
-      </Button>
+      {/* Panel-management controls act on the mosaic, which is hidden while
+          config fills the window OR review mode has replaced it — in both cases
+          they'd mutate an invisible surface, so they're gone rather than merely
+          disabled. Only the mode toggles and settings survive every surface. */}
+      {configActive || reviewActive ? null : (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onAddSession('row')}
+            disabled={atCapacity}
+            aria-label="New session panel"
+            title="New session — ⌥T"
+          >
+            <MessageSquarePlus size={15} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onAddTerminal('row')}
+            disabled={atCapacity}
+            aria-label="New terminal panel"
+            title="New terminal — ⌥C"
+          >
+            <SquareTerminal size={15} />
+          </Button>
+        </>
+      )}
+
       {/* A toggle, not an add: config swaps the whole surface below and this
           button is also the way back, mirroring the Opt+K command. */}
       <Button
@@ -101,46 +115,67 @@ export function WorkspaceBar({
         <SlidersHorizontal size={15} />
       </Button>
 
+      {/* Visible from every surface, like the config toggle: both mode switches
+          must be reachable by click from anywhere, or config becomes a dead end
+          you can only leave by the key you may not know. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggleReview}
+        aria-label={reviewActive ? 'Back to panels' : 'Review mode'}
+        aria-pressed={reviewActive}
+        title="Review — ⌥R"
+        className={reviewActive ? 'bg-accent-wash text-accent' : undefined}
+      >
+        <GitPullRequestArrow size={15} />
+      </Button>
+
+      {configActive ? null : (
+        <>
+          <Divider />
+
+          {/* Which way the next panel splits the focused one. Dragging can
+              rearrange afterwards; this just avoids an obvious extra drag for
+              the common case. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onAddSession('row')}
+            disabled={atCapacity}
+            aria-label="Add panel to the right"
+            title="Split right — ⌥A"
+          >
+            <Columns2 size={15} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onAddSession('column')}
+            disabled={atCapacity}
+            aria-label="Add panel below"
+            title="Split down — ⌥S"
+          >
+            <Rows2 size={15} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBalance}
+            disabled={panelCount < 2}
+            aria-label="Even out panel sizes"
+            title="Even out panel sizes"
+          >
+            <LayoutGrid size={15} />
+          </Button>
+        </>
+      )}
+
       <Divider />
 
-      {/* Which way the next panel splits the focused one. Dragging can rearrange
-          afterwards; this just avoids an obvious extra drag for the common case. */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onAddSession('row')}
-        disabled={atCapacity}
-        aria-label="Add panel to the right"
-        title="Split right — ⌥A"
-      >
-        <Columns2 size={15} />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onAddSession('column')}
-        disabled={atCapacity}
-        aria-label="Add panel below"
-        title="Split down — ⌥S"
-      >
-        <Rows2 size={15} />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onBalance}
-        disabled={panelCount < 2}
-        aria-label="Even out panel sizes"
-        title="Even out panel sizes"
-      >
-        <LayoutGrid size={15} />
-      </Button>
-
-      <Divider />
-
-      {/* Only once you're near the ceiling. A permanent "0/8" is a number nobody
-          reads until it starts mattering. */}
-      {panelCount >= MAX_PANELS - 2 ? (
+      {/* Only once you're near the ceiling, and only where the count means
+          anything. A permanent "0/8" is a number nobody reads until it starts
+          mattering. */}
+      {!configActive && panelCount >= MAX_PANELS - 2 ? (
         <span className="px-1 text-xs tabular-nums text-text-faint">
           {panelCount}/{MAX_PANELS}
         </span>

@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { MessagesSquare, SquareTerminal, X } from 'lucide-react'
 import type { Panel } from '@/stores/workspaceStore'
+import { selectPanelNumber, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
@@ -49,6 +50,9 @@ export const PanelFrame = memo(function PanelFrame({
   const tab = useSessionStore((state) =>
     panel.kind === 'session' ? state.tabs.find((entry) => entry.id === panel.refId) : undefined,
   )
+  // Visual order, same numbering as the ⌥1–⌥8 shortcuts — recomputed from the
+  // layout tree, so a panel dragged to the front becomes #1 without a rename.
+  const number = useWorkspaceStore(selectPanelNumber(panel.id))
 
   const title = tab?.title ?? panel.title
   const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
@@ -76,6 +80,12 @@ export const PanelFrame = memo(function PanelFrame({
         onPointerDown={onHeaderPointerDown}
         className="flex h-8 shrink-0 cursor-grab items-center gap-2 px-2 text-xs active:cursor-grabbing"
       >
+        {/* Visual position, matching the ⌥1–⌥8 focus shortcuts — quiet enough not
+            to compete with the focus indicator right next to it. */}
+        {number > 0 ? (
+          <span className="shrink-0 font-mono text-xs tabular-nums text-text-faint">{number}</span>
+        ) : null}
+
         {/* The focus indicator. First element, hard left, and the only thing in the
             header that changes colour. */}
         <Icon
