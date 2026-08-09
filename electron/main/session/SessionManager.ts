@@ -22,10 +22,28 @@ import { SessionRunner } from './SessionRunner'
  * session id if the user resumes or forks into another — without the registry ever
  * losing track of which subprocess belongs to which tab.
  */
+/**
+ * A read-only tap on the outbound event stream.
+ *
+ * Deliberately shaped as an observer of the *already emitted* batch rather than a
+ * filter in the middle of it: an observer that throws or blocks must never be able
+ * to change what the renderer receives, and there is exactly one thing it may do —
+ * look. `root` is resolved here because the tab's cwd is registry state; a tap
+ * shouldn't have to reach into a runner for it.
+ */
+export type SessionEventObserver = (tabId: string, root: string, events: StreamEvent[]) => void
+
 export class SessionManager {
   private readonly runners = new Map<string, SessionRunner>()
   /** Latest known session id per tab, for persistence and the resume picker. */
   private readonly sessionIds = new Map<string, string>()
+  /**
+   * Resolved working directory per tab. Kept here rather than read back off the
+   * runner because it must survive for as long as the tab does and is the unit the
+   * review tracker and the git poll are scoped by.
+   */
+  private readonly roots = new Map<string, string>()
+  private observer: SessionEventObserver | null = null
   /**
    * Monotonic batch counter. Stamped on every envelope so the renderer can drop
    * duplicates; see `StreamEnvelope.seq`. Process-wide rather than per-tab so a
@@ -35,10 +53,25 @@ export class SessionManager {
 
   constructor(private readonly getWebContents: () => WebContents | null) {}
 
+  /** Install the single event tap. Later calls replace the previous observer. */
+  observeEvents(observer: SessionEventObserver | null): void {
+    this.observer = observer
+  }
+
+  /** Distinct working directories of live sessions. */
+  liveRoots(): string[] {
+    return [...this.runners.keys()].flatMap((tabId) => {
+      const root = this.roots.get(tabId)
+      return root ? [root] : []
+    })
+  }
+
   async create(request: CreateSessionRequest): Promise<void> {
     // Replacing a tab's session must dispose the old one first, or its subprocess
     // is orphaned with no remaining reference to shut it down.
     await this.close(request.tabId)
+
+    this.roots.set(request.tabId, request.cwd ?? process.cwd())
 
     const runner = new SessionRunner(request, {
       emit: (events) => this.emit(request.tabId, events),
@@ -65,6 +98,7 @@ export class SessionManager {
     // in place would let a concurrent create() find a dying runner.
     this.runners.delete(tabId)
     this.sessionIds.delete(tabId)
+    this.roots.delete(tabId)
     await runner.dispose()
   }
 
@@ -73,6 +107,7 @@ export class SessionManager {
     const runners = [...this.runners.values()]
     this.runners.clear()
     this.sessionIds.clear()
+    this.roots.clear()
     await Promise.allSettled(runners.map((runner) => runner.dispose()))
   }
 
@@ -88,6 +123,16 @@ export class SessionManager {
    * WebContents throws and would surface as an unhandled rejection on quit.
    */
   private emit(tabId: string, events: StreamEvent[]): void {
+    // Before the delivery guard, not after: the review set must still record an
+    // edit made during a turn that outlives the window it was started from.
+    if (this.observer) {
+      try {
+        this.observer(tabId, this.roots.get(tabId) ?? process.cwd(), events)
+      } catch {
+        // A tap is an accessory. It never gets to break the stream it observes.
+      }
+    }
+
     const contents = this.getWebContents()
     if (!contents || contents.isDestroyed()) return
     this.seq += 1

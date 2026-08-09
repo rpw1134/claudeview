@@ -5,6 +5,7 @@ import os from 'node:os'
 import type { IpcCalls, SessionSummary } from '../../../shared/ipc'
 import type { SessionManager } from '../session/SessionManager'
 import type { TerminalManager } from '../terminal/TerminalManager'
+import type { ReviewTracker } from '../review/ReviewTracker'
 import * as config from '../config/ConfigStore'
 
 /**
@@ -24,6 +25,7 @@ function handle<K extends keyof IpcCalls>(
 export function registerIpc(
   sessions: SessionManager,
   terminals: TerminalManager,
+  review: ReviewTracker,
   getWindow: () => BrowserWindow | null,
 ): void {
   handle('session:create', async (request) => {
@@ -163,6 +165,13 @@ export function registerIpc(
   )
   handle('config:hooks:get', ({ projectPath }) => config.getHooks(projectPath))
   handle('config:hooks:set', ({ projectPath, hooks }) => config.setHooks(projectPath, hooks))
+
+  // Review set. `review:file` reads only paths already in the set — the tracker
+  // enforces that, so this is not a general file-read channel.
+  handle('review:list', () => review.list())
+  handle('review:file', ({ path }) => review.read(path))
+  handle('review:dismiss', ({ paths }) => review.dismiss(paths))
+  handle('review:dismiss-all', () => review.dismissAll())
 }
 
 /** Remove every handler. Paired with `registerIpc` so a reload can't double-register. */
@@ -198,6 +207,10 @@ export function unregisterIpc(): void {
     'config:skills:delete-file',
     'config:hooks:get',
     'config:hooks:set',
+    'review:list',
+    'review:file',
+    'review:dismiss',
+    'review:dismiss-all',
   ]
   for (const channel of channels) ipcMain.removeHandler(channel)
 }

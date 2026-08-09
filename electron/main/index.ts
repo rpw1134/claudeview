@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SessionManager } from './session/SessionManager'
 import { TerminalManager } from './terminal/TerminalManager'
+import { ReviewTracker } from './review/ReviewTracker'
 import { registerIpc, unregisterIpc } from './ipc/register'
 
 // The main bundle is ESM, so __dirname does not exist. Derive it.
@@ -34,6 +35,14 @@ const ICON_PATH = path.join(DIST_ELECTRON, '../build/icon.png')
 let window: BrowserWindow | null = null
 const sessions = new SessionManager(() => window?.webContents ?? null)
 const terminals = new TerminalManager(() => window?.webContents ?? null)
+const review = new ReviewTracker(
+  () => window?.webContents ?? null,
+  () => sessions.liveRoots(),
+)
+// The tap is installed once, here, rather than inside SessionManager: the manager
+// stays a registry that knows nothing about review, and the dependency points one
+// way (review -> session events), which is what makes it removable.
+sessions.observeEvents((tabId, root, events) => review.observe(tabId, root, events))
 
 function createWindow(): void {
   window = new BrowserWindow({
@@ -129,7 +138,8 @@ if (!app.requestSingleInstanceLock()) {
       app.dock?.setIcon(ICON_PATH)
     }
 
-    registerIpc(sessions, terminals, () => window)
+    registerIpc(sessions, terminals, review, () => window)
+    review.start()
     createWindow()
 
     app.on('activate', () => {
@@ -153,6 +163,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   shuttingDown = true
   terminals.disposeAll()
+  review.dispose()
   void sessions.disposeAll().finally(() => {
     unregisterIpc()
     app.quit()

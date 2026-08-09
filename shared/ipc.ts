@@ -303,7 +303,63 @@ export type IpcCalls = {
   'config:skills:delete-file': [{ projectPath: string; name: string; file: string }, void]
   'config:hooks:get': [{ projectPath: string }, HooksConfig]
   'config:hooks:set': [{ projectPath: string; hooks: HooksConfig }, void]
+
+  /**
+   * The review set: files agents have changed since you last dismissed them.
+   *
+   * Contents are deliberately *not* included in the list. A review set can span
+   * hundreds of files and the UI shows one at a time, so bodies are fetched per
+   * file — otherwise every push would carry megabytes the renderer discards.
+   */
+  'review:list': [void, ReviewFile[]]
+  'review:file': [
+    { path: string },
+    { content: string; marks: ReviewLineMark[]; tooLarge: boolean } | null,
+  ]
+  /** Forget these paths. A later edit re-adds them against a fresh baseline. */
+  'review:dismiss': [{ paths: string[] }, void]
+  'review:dismiss-all': [void, void]
 }
+
+/** A run of consecutive lines in the *current* file, 1-indexed. */
+export type ReviewLineMark = { start: number; count: number; kind: 'added' | 'modified' }
+
+/**
+ * One file in the review set.
+ *
+ * `tabId` is absent for git-only detections: the poller finds changes made by
+ * anything — a rebase, an editor, an agent whose tool events were missed — and
+ * attributing those to a session would be a guess.
+ */
+export type ReviewFile = {
+  /** Absolute path. The identity of the entry; every call keys off it. */
+  path: string
+  /** Relative to `root`, for display. */
+  relPath: string
+  /** Workspace root it was detected under (the session's cwd). */
+  root: string
+  /** Session that last touched it. Absent for git-only detections. */
+  tabId?: string
+  /** When the baseline was captured — i.e. the state the diff is against. */
+  firstTouchedAt: number
+  lastChangedAt: number
+  /** Existed at baseline and is now gone. `review:file` returns null for these. */
+  deleted: boolean
+}
+
+/** Channel for main -> renderer review-set pushes. */
+export const REVIEW_CHANNEL = 'review:event' as const
+
+/**
+ * Every push carries the **whole** current set, not a delta.
+ *
+ * The set is small (files a human is about to read) and changes in bursts as a
+ * turn writes, so a full snapshot costs little and removes an entire class of
+ * bug: there is no incremental state in the renderer to fall out of sync when a
+ * push is dropped, duplicated, or arrives during a reload. `seq` carries the
+ * same duplicate-suppression contract as `StreamEnvelope.seq`.
+ */
+export type ReviewEnvelope = { seq: number; files: ReviewFile[] }
 
 /**
  * A config scope: `~/.claude` itself (global, shown as "Global") or a project
@@ -350,6 +406,8 @@ export type Api = {
   onStreamEvent: (handler: (envelope: StreamEnvelope) => void) => () => void
   /** Same contract as `onStreamEvent`: the returned function MUST be called. */
   onTerminalEvent: (handler: (envelope: TerminalEnvelope) => void) => () => void
+  /** Same contract as `onStreamEvent`: the returned function MUST be called. */
+  onReviewEvent: (handler: (envelope: ReviewEnvelope) => void) => () => void
   /**
    * Absolute paths for files dropped onto the window.
    *

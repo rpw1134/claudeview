@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
-import type { Api, StreamEnvelope, TerminalEnvelope } from '../../shared/ipc'
-import { STREAM_CHANNEL, TERMINAL_CHANNEL } from '../../shared/ipc'
+import type { Api, ReviewEnvelope, StreamEnvelope, TerminalEnvelope } from '../../shared/ipc'
+import { REVIEW_CHANNEL, STREAM_CHANNEL, TERMINAL_CHANNEL } from '../../shared/ipc'
 
 /**
  * The only bridge between the renderer and Node.
@@ -43,6 +43,10 @@ const api: Api = {
   'config:skills:delete-file': (payload) => ipcRenderer.invoke('config:skills:delete-file', payload),
   'config:hooks:get': (payload) => ipcRenderer.invoke('config:hooks:get', payload),
   'config:hooks:set': (payload) => ipcRenderer.invoke('config:hooks:set', payload),
+  'review:list': () => ipcRenderer.invoke('review:list'),
+  'review:file': (payload) => ipcRenderer.invoke('review:file', payload),
+  'review:dismiss': (payload) => ipcRenderer.invoke('review:dismiss', payload),
+  'review:dismiss-all': () => ipcRenderer.invoke('review:dismiss-all'),
 
   onStreamEvent: (handler) => {
     // The IpcRendererEvent is deliberately not forwarded: it carries `sender`,
@@ -56,6 +60,12 @@ const api: Api = {
     const listener = (_event: IpcRendererEvent, envelope: TerminalEnvelope) => handler(envelope)
     ipcRenderer.on(TERMINAL_CHANNEL, listener)
     return () => ipcRenderer.removeListener(TERMINAL_CHANNEL, listener)
+  },
+
+  onReviewEvent: (handler) => {
+    const listener = (_event: IpcRendererEvent, envelope: ReviewEnvelope) => handler(envelope)
+    ipcRenderer.on(REVIEW_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(REVIEW_CHANNEL, listener)
   },
 
   // `webUtils` lives here rather than in the renderer because it is part of the
