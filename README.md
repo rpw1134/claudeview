@@ -31,6 +31,11 @@ for the job.
   transcript, since the CLI itself replays nothing: the main thread plus every
   subagent lane, each reconnected to the Task row that spawned it (see
   [troubleshooting](docs/troubleshooting.md#a-session-sits-on-starting-and-shows-no-messages)).
+- **Review what changed.** `⌥R` opens a read-only view of every file the agents have
+  touched, with changed lines marked in the gutter — no red/green diff pane, just
+  "which lines matter". Select line ranges, attach comments, and send the whole batch
+  to a session as one message. Dismissing a file re-baselines it. See
+  [review.md](docs/review.md).
 - **Attachments.** Drop files or folders onto a composer, or use the paperclip
   (`⌥` for folders). Paths are sent as references, not contents — the agent has file
   tools and a permission model, so it reads what it needs when it needs it.
@@ -121,6 +126,7 @@ a thousand-message transcript rendering as smoothly as an empty one.
 | [lifecycle-and-cleanup.md](docs/lifecycle-and-cleanup.md) | Every teardown path and why it exists |
 | [design-system.md](docs/design-system.md) | Surfaces, spacing, radius, hierarchy, colorways |
 | [panels-and-terminals.md](docs/panels-and-terminals.md) | Panel grid, layouts, focus routing, PTY terminals |
+| [review.md](docs/review.md) | Change tracking, the gutter marks, the comment workflow |
 | [troubleshooting.md](docs/troubleshooting.md) | Known issues, including the Electron ESM hang |
 
 ## Security posture

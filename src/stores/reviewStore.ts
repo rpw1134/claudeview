@@ -1,0 +1,232 @@
+import { create } from 'zustand'
+import type { ReviewFile } from '@shared/ipc'
+import { api } from '@/lib/api'
+import { useSessionStore } from './sessionStore'
+
+const PERSIST_KEY = 'claudeview.review.comments.v1'
+/** Excerpts are a reminder of *which* line, not a copy of it. */
+const EXCERPT_MAX = 80
+
+/**
+ * A note attached to a line range of a file.
+ *
+ * Comments are keyed by absolute path rather than by review-set entry, and they
+ * deliberately **survive dismissal of their file**. Dismissing means "I've read
+ * this"; the file comes back the moment an agent touches it again, and losing the
+ * note you'd written about it in between would be a silent data loss for the one
+ * piece of state in this surface the user actually authored.
+ *
+ * `sentAt` is a stamp, not a lifecycle: a sent comment stays in the list so you can
+ * see what you already asked for, and can be resolved or deleted afterwards.
+ */
+export type ReviewComment = {
+  id: string
+  /** Absolute path, matching `ReviewFile.path`. */
+  path: string
+  /** 1-indexed, inclusive, on the content as it was when the comment was written. */
+  startLine: number
+  endLine: number
+  /** First selected line, trimmed — enough to recognise the range later. */
+  excerpt: string
+  text: string
+  resolved: boolean
+  sentAt?: number
+  createdAt: number
+}
+
+type ReviewState = {
+  files: ReviewFile[]
+  activePath: string | null
+  comments: ReviewComment[]
+  /** False until the first `review:list` lands, so the empty state isn't a flash. */
+  loaded: boolean
+
+  /** Apply one push (or the initial list). The whole set, never a delta. */
+  setFiles: (files: ReviewFile[]) => void
+  setActivePath: (path: string) => void
+
+  addComment: (input: {
+    path: string
+    startLine: number
+    endLine: number
+    excerpt: string
+    text: string
+  }) => void
+  removeComment: (id: string) => void
+  toggleResolved: (id: string) => void
+
+  dismiss: (paths: string[]) => Promise<void>
+  dismissAll: () => Promise<void>
+
+  /** Send every unresolved comment to one session as a single message. */
+  sendComments: (tabId: string) => Promise<number>
+}
+
+function persist(comments: ReviewComment[]): ReviewComment[] {
+  try {
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(comments))
+  } catch {
+    // A full or disabled localStorage must not take the app down.
+  }
+  return comments
+}
+
+function loadPersisted(): ReviewComment[] {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as ReviewComment[]) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Keep the open file open.
+ *
+ * The set re-sorts on every push (most-recently-changed first), so following the
+ * first entry would yank you off whatever you were reading the instant an agent
+ * saved something else. The active file only moves when it leaves the set.
+ */
+function resolveActive(files: ReviewFile[], current: string | null): string | null {
+  if (current && files.some((file) => file.path === current)) return current
+  return files[0]?.path ?? null
+}
+
+export function excerptFrom(line: string | undefined): string {
+  const trimmed = (line ?? '').trim()
+  return trimmed.length > EXCERPT_MAX ? `${trimmed.slice(0, EXCERPT_MAX - 1)}…` : trimmed
+}
+
+/**
+ * Compose the batch message.
+ *
+ * One message for every comment rather than one per comment: a review is a single
+ * unit of feedback, and ten separate turns would have the agent re-planning after
+ * each one. Grouped by file and ordered by line, because that is the order it will
+ * work through them in.
+ *
+ * Files are named by `relPath` where the entry is still in the set, and by absolute
+ * path where it isn't — a comment outlives its file's dismissal, and an unlabelled
+ * heading would leave the agent guessing.
+ */
+export function composeReviewMessage(comments: ReviewComment[], files: ReviewFile[]): string {
+  const labels = new Map(files.map((file) => [file.path, file.relPath]))
+
+  const byPath = new Map<string, ReviewComment[]>()
+  for (const comment of comments) {
+    const bucket = byPath.get(comment.path)
+    if (bucket) bucket.push(comment)
+    else byPath.set(comment.path, [comment])
+  }
+
+  const sections: string[] = []
+  for (const [path, bucket] of byPath) {
+    const lines = [...bucket]
+      .sort((a, b) => a.startLine - b.startLine)
+      .map((comment) => {
+        const range =
+          comment.startLine === comment.endLine
+            ? `L${comment.startLine}`
+            : `L${comment.startLine}–L${comment.endLine}`
+        const excerpt = comment.excerpt ? ` (\`${comment.excerpt}\`)` : ''
+        return `- **${range}**${excerpt}: ${comment.text.trim()}`
+      })
+    sections.push(`## ${labels.get(path) ?? path}\n${lines.join('\n')}`)
+  }
+
+  const count = comments.length
+  return (
+    `Code review feedback (${count} comment${count === 1 ? '' : 's'}):\n\n` +
+    `${sections.join('\n\n')}\n\n` +
+    'Please address each point and reply with what you changed per comment.'
+  )
+}
+
+export const useReviewStore = create<ReviewState>()((setState, getState) => ({
+  files: [],
+  activePath: null,
+  comments: loadPersisted(),
+  loaded: false,
+
+  setFiles: (files) =>
+    setState((state) => ({
+      files,
+      loaded: true,
+      activePath: resolveActive(files, state.activePath),
+    })),
+
+  setActivePath: (path) => setState({ activePath: path }),
+
+  addComment: (input) =>
+    setState((state) => ({
+      comments: persist([
+        ...state.comments,
+        {
+          id: crypto.randomUUID(),
+          ...input,
+          text: input.text.trim(),
+          resolved: false,
+          createdAt: Date.now(),
+        },
+      ]),
+    })),
+
+  removeComment: (id) =>
+    setState((state) => ({
+      comments: persist(state.comments.filter((comment) => comment.id !== id)),
+    })),
+
+  toggleResolved: (id) =>
+    setState((state) => ({
+      comments: persist(
+        state.comments.map((comment) =>
+          comment.id === id ? { ...comment, resolved: !comment.resolved } : comment,
+        ),
+      ),
+    })),
+
+  /**
+   * Drop paths locally, then tell main.
+   *
+   * Optimistic because dismissal is the one action here with no result to wait
+   * for — the authoritative push follows within a frame or two and would only
+   * confirm what the user already did. Comments are untouched, deliberately.
+   */
+  dismiss: async (paths) => {
+    if (paths.length === 0) return
+    const dropped = new Set(paths)
+    setState((state) => {
+      const files = state.files.filter((file) => !dropped.has(file.path))
+      return { files, activePath: resolveActive(files, state.activePath) }
+    })
+    await api['review:dismiss']({ paths })
+  },
+
+  dismissAll: async () => {
+    setState({ files: [], activePath: null })
+    await api['review:dismiss-all']()
+  },
+
+  sendComments: async (tabId) => {
+    const { comments, files } = getState()
+    const pending = comments.filter((comment) => !comment.resolved)
+    if (pending.length === 0) return 0
+
+    await useSessionStore.getState().send(tabId, composeReviewMessage(pending, files))
+
+    // Stamped after the send resolves, so a failed send doesn't leave comments
+    // claiming to have been delivered.
+    const sentAt = Date.now()
+    const sent = new Set(pending.map((comment) => comment.id))
+    setState((state) => ({
+      comments: persist(
+        state.comments.map((comment) =>
+          sent.has(comment.id) ? { ...comment, sentAt } : comment,
+        ),
+      ),
+    }))
+    return pending.length
+  },
+}))
