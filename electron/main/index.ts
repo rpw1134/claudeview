@@ -25,8 +25,33 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
  * Packaged builds take the name from electron-builder's `productName`; setting it
  * here as well costs nothing and keeps the two identical.
  */
-const APP_NAME = 'ClaudeView'
+const APP_NAME = 'Stryde'
 app.setName(APP_NAME)
+
+/*
+ * One-time profile migration: the app was named ClaudeView, and Electron derives
+ * the userData directory from the name — so the rename would silently orphan
+ * every persisted thing (appearance, tab list, review set) in the old directory.
+ * Renaming the directory itself carries it all forward. Sync and immediate, so
+ * it completes before anything (ReviewTracker, the renderer's localStorage)
+ * opens files inside the new location. Failure falls through to a fresh
+ * profile, which is exactly what no migration would have meant anyway.
+ */
+try {
+  const target = app.getPath('userData')
+  if (!fs.existsSync(target)) {
+    const parent = path.dirname(target)
+    for (const legacy of ['claudeview', 'ClaudeView']) {
+      const source = path.join(parent, legacy)
+      if (fs.existsSync(source)) {
+        fs.renameSync(source, target)
+        break
+      }
+    }
+  }
+} catch {
+  // A fresh profile beats refusing to start.
+}
 
 // Regenerate with `npm run icon`. Packaged macOS builds get the .icns via
 // electron-builder's `build/` convention; this path is what dresses the dev dock.
@@ -71,7 +96,7 @@ function createWindow(): void {
        *
        * Chromium stops `requestAnimationFrame` entirely for an occluded window, and
        * this app's text reveal is driven by rAF (`src/lib/streamBuffers.ts`). With
-       * throttling on, a turn that streams while ClaudeView sits behind an editor
+       * throttling on, a turn that streams while Stryde sits behind an editor
        * freezes mid-sentence and then snaps to the end when you switch back —
        * because the backlog has grown past the instant-reveal threshold. Watching a
        * long run in a side window is exactly what this app is for, so the frames

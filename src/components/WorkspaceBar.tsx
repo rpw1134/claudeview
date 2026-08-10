@@ -1,15 +1,20 @@
 import {
   Columns2,
+  GitPullRequestArrow,
   LayoutGrid,
   MessageSquarePlus,
+  MessagesSquare,
   Rows2,
   Settings2,
+  SlidersHorizontal,
   SquareTerminal,
+  type LucideIcon,
 } from 'lucide-react'
 import { MAX_PANELS } from '@/stores/workspaceStore'
 import { isUnviewed, useReviewStore } from '@/stores/reviewStore'
 import type { SplitDirection } from '@/lib/layoutTree'
 import { Button } from './ui/Button'
+import { SketchUnderline } from './Sketch'
 import { cn } from '@/lib/utils'
 
 /** The three top-level surfaces, navigated as tabs. */
@@ -69,36 +74,38 @@ export function WorkspaceBar({
       // control lands on the same vertical line as the content below it.
       className="flex h-12 shrink-0 items-center justify-end gap-0.5 pr-12"
     >
-      <nav
-        aria-label="Surface"
-        className="mr-2 flex items-center gap-2"
-      >
-        <div className="hand-sm-2 flex items-stretch gap-0.5 bg-surface p-0.5">
+      {/* Sessions and Review sit close (review is a lens on the sessions' work);
+          Config stands apart across a wider gap. No pill containers — selection
+          is the drawn underline, the same handmade stroke as the wordmark's
+          world, so the chrome carries the app's identity instead of a generic
+          segmented control. */}
+      <nav aria-label="Surface" className="mr-3 flex items-center">
+        <SurfaceTab
+          icon={MessagesSquare}
+          label="Sessions"
+          selected={surface === 'sessions'}
+          title="Sessions"
+          onClick={() => onSurface('sessions')}
+        />
+        {reviewCount > 0 ? (
           <SurfaceTab
-            label="Sessions"
-            selected={surface === 'sessions'}
-            title="Sessions"
-            onClick={() => onSurface('sessions')}
+            icon={GitPullRequestArrow}
+            label="Review"
+            selected={surface === 'review'}
+            title="Review — ⌥R"
+            onClick={() => onSurface('review')}
+            badge={reviewCount > 99 ? '99+' : String(reviewCount)}
+            badgeAccent={hasUnviewed}
           />
-          {reviewCount > 0 ? (
-            <SurfaceTab
-              label="Review"
-              selected={surface === 'review'}
-              title="Review — ⌥R"
-              onClick={() => onSurface('review')}
-              badge={reviewCount > 99 ? '99+' : String(reviewCount)}
-              badgeAccent={hasUnviewed}
-            />
-          ) : null}
-        </div>
-        <div className="hand-sm-2 flex items-stretch bg-surface p-0.5">
-          <SurfaceTab
-            label="Config"
-            selected={surface === 'config'}
-            title="Claude config — ⌥K"
-            onClick={() => onSurface('config')}
-          />
-        </div>
+        ) : null}
+        <span className="mx-2 h-4 w-px bg-line" aria-hidden />
+        <SurfaceTab
+          icon={SlidersHorizontal}
+          label="Config"
+          selected={surface === 'config'}
+          title="Claude config — ⌥K"
+          onClick={() => onSurface('config')}
+        />
       </nav>
 
       {/* Panel-management controls act on the mosaic and are meaningless on any
@@ -188,10 +195,15 @@ export function WorkspaceBar({
 }
 
 /**
- * One tab. `aria-current` rather than `aria-pressed`: these are locations, not
- * toggles — the whole point of the redesign.
+ * One tab: icon, label, and — when selected — a drawn underline.
+ *
+ * `aria-current` rather than `aria-pressed`: these are locations, not toggles.
+ * The underline is the sole selection mark and it isn't straight on purpose;
+ * the icon takes the accent alongside it so selection never rides on a single
+ * 6px stroke alone.
  */
 function SurfaceTab({
+  icon: Icon,
   label,
   selected,
   title,
@@ -199,6 +211,7 @@ function SurfaceTab({
   badgeAccent,
   onClick,
 }: {
+  icon: LucideIcon
   label: string
   selected: boolean
   title: string
@@ -213,10 +226,18 @@ function SurfaceTab({
       aria-current={selected ? 'page' : undefined}
       title={title}
       className={cn(
-        'hand-sm-1 flex items-center gap-1.5 px-2.5 text-xs transition-colors',
-        selected ? 'bg-accent-wash text-text' : 'text-text-muted hover:bg-raised hover:text-text',
+        'group relative flex h-8 items-center gap-1.5 px-2.5 text-xs transition-colors',
+        selected ? 'text-text' : 'text-text-muted hover:text-text',
       )}
     >
+      <Icon
+        size={14}
+        className={cn(
+          'shrink-0 transition-colors',
+          selected ? 'text-accent' : 'text-text-faint group-hover:text-text-muted',
+        )}
+        aria-hidden
+      />
       {label}
       {badge ? (
         <span
@@ -229,6 +250,9 @@ function SurfaceTab({
         >
           {badge}
         </span>
+      ) : null}
+      {selected ? (
+        <SketchUnderline className="absolute inset-x-1.5 bottom-0 text-accent" />
       ) : null}
     </button>
   )

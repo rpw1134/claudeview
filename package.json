@@ -1,5 +1,5 @@
 {
-  "name": "claudeview",
+  "name": "stryde",
   "version": "0.1.0",
   "private": true,
   "description": "A streaming desktop UI for Claude Code. Runs the Claude Agent SDK in Electron's main process and renders the message stream as smooth, readable markdown.",
@@ -58,8 +58,8 @@
     "zustand": "^5.0.14"
   },
   "build": {
-    "appId": "dev.rpw1134.claudeview",
-    "productName": "ClaudeView",
+    "appId": "dev.stryde.app",
+    "productName": "Stryde",
     "directories": {
       "buildResources": "build"
     },

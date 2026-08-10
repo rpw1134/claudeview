@@ -205,7 +205,7 @@ Together: **13ms** from Enter to message-plus-indicator.
 ## A stream freezes, then jumps to the end when I switch back to the window
 
 Chromium stops `requestAnimationFrame` entirely for an **occluded** window, and the
-text reveal is rAF-driven (`src/lib/streamBuffers.ts`). While ClaudeView sat behind
+text reveal is rAF-driven (`src/lib/streamBuffers.ts`). While Stryde sat behind
 another window the reveal cursor stopped advancing; on return, the backlog exceeded
 `INSTANT_THRESHOLD` and the whole answer appeared at once.
 

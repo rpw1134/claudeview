@@ -104,8 +104,8 @@ export function NewSessionPanel({
           <div>
             <Wordmark />
             <p className="mt-3 max-w-[58ch] text-sm leading-relaxed text-text-muted">
-              Sessions and terminals, side by side. Drag a panel by its header to move it,
-              drag a divider to resize.
+              Hit your stride with Claude Code — sessions and terminals side by side,
+              and every change your agents make queued up for review.
             </p>
           </div>
           <Button

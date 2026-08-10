@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * The ClaudeView mark: a six-armed asterisk, drawn rather than constructed.
+ * The Stryde mark: a six-armed asterisk, drawn rather than constructed.
  *
  * ## Why it isn't geometric
  *
@@ -115,7 +115,7 @@ export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn('flex items-baseline gap-2.5', className)}>
       <Mark state="idle" size={28} className="translate-y-1 text-accent" />
-      <span className="font-display text-3xl tracking-tight text-text">ClaudeView</span>
+      <span className="font-display text-3xl tracking-tight text-text">Stryde</span>
     </span>
   )
 }

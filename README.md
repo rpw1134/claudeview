@@ -1,11 +1,13 @@
-# ClaudeView
+# Stryde
 
-A desktop UI for [Claude Code](https://claude.com/claude-code). It runs the Claude
-Agent SDK inside Electron's main process, keeps one long-lived session per tab, and
-renders the message stream as smooth, readable markdown.
+**Hit your stride with Claude Code.** Stryde is a desktop workspace for
+[Claude Code](https://claude.com/claude-code): it runs the Claude Agent SDK inside
+Electron's main process, keeps one long-lived session per tab, renders the message
+stream as smooth readable markdown — and turns the code your agents write into a
+reviewable queue you annotate and send back, without a remote or an IDE.
 
-Built for reading agent output outside an IDE, when the terminal is the wrong shape
-for the job.
+Built for the stretch of work *around* the agent — reading, steering, reviewing —
+when the terminal is the wrong shape for the job. `stryde.dev`
 
 <!-- Screenshot: docs/images/screenshot.png -->
 
@@ -51,7 +53,7 @@ for the job.
 ## Requirements
 
 - Node.js 20+ (developed on 24)
-- An authenticated Claude Code CLI — run `claude` once and log in. ClaudeView uses
+- An authenticated Claude Code CLI — run `claude` once and log in. Stryde uses
   the same credentials and the same `~/.claude` settings, `CLAUDE.md`, and skills.
 - A toolchain able to build native modules (`node-pty`). `npm install` rebuilds it
   for Electron automatically via `postinstall`; re-run with `npm run rebuild:native`.
