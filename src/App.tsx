@@ -10,6 +10,7 @@ import { SettingsDialog } from '@/components/SettingsDialog'
 import { NewSessionPanel } from '@/components/NewSessionPanel'
 import { ConfigPanel } from '@/components/config/ConfigPanel'
 import { ReviewView } from '@/components/review/ReviewView'
+import { OnboardingFlow } from '@/components/onboarding'
 import { useReviewStore } from '@/stores/reviewStore'
 import type { Surface } from '@/components/WorkspaceBar'
 
@@ -233,7 +234,6 @@ export function App() {
             home={home}
             onStart={(options) => void addPanel('session', options)}
             onStartTerminal={(cwd) => void addPanel('terminal', { cwd })}
-            onOpenConfig={() => goTo('config')}
           />
         ) : (
           <PanelMosaic
@@ -264,6 +264,10 @@ export function App() {
       ) : null}
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      {/* Self-gating on the profile store: renders nothing once onboarding has
+          been completed, so there is no first-run condition to maintain here. */}
+      <OnboardingFlow />
     </div>
   )
 }

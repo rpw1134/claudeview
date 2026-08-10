@@ -42,6 +42,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.12",
+    "driver.js": "^1.8.0",
     "electron": "^40.10.6",
     "electron-builder": "^26.15.3",
     "highlight.js": "^11.11.1",

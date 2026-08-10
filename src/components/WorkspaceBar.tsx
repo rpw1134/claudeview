@@ -79,7 +79,7 @@ export function WorkspaceBar({
           is the drawn underline, the same handmade stroke as the wordmark's
           world, so the chrome carries the app's identity instead of a generic
           segmented control. */}
-      <nav aria-label="Surface" className="mr-3 flex items-center">
+      <nav aria-label="Surface" data-tour="tabs" className="mr-3 flex items-center">
         <SurfaceTab
           icon={MessagesSquare}
           label="Sessions"
@@ -143,6 +143,7 @@ export function WorkspaceBar({
             size="icon"
             onClick={() => onAddSession('row')}
             disabled={atCapacity}
+            data-tour="panel-controls"
             aria-label="Add panel to the right"
             title="Split right — ⌥A"
           >
@@ -185,6 +186,7 @@ export function WorkspaceBar({
         variant="ghost"
         size="icon"
         onClick={onOpenSettings}
+        data-tour="settings"
         aria-label="Appearance settings"
         title="Appearance — ⌘,"
       >

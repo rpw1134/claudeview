@@ -494,3 +494,86 @@ textarea,
     animation-duration: 0.01ms !important;
   }
 }
+
+/*
+ * driver.js, wearing the app's palette.
+ *
+ * The library ships a white popover with a grey border — correct for a generic
+ * site, wrong beside a themed window it's supposed to be pointing at. These
+ * overrides re-point it at the same tokens every other floating surface uses
+ * (`--overlay` fill, `--text` on top), so the tour reads as part of the app in
+ * every colorway including a custom one. Deliberately minimal: layout, sizing
+ * and positioning stay the library's problem.
+ */
+.driver-popover {
+  background-color: var(--overlay);
+  color: var(--text);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  max-width: 320px;
+  font-family: var(--font-body);
+  box-shadow: 0 10px 30px oklch(0 0 0 / 0.35);
+}
+.driver-popover-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.driver-popover-description {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.driver-popover-progress-text {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Footer buttons match the `subtle` Button variant; "next" takes the accent so
+   the way forward is the one emphasised control in the popover. */
+.driver-popover-footer-btn {
+  background-color: var(--raised);
+  color: var(--text);
+  border: none;
+  border-radius: 6px 9px 6px 8px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  transition: background-color 0.15s;
+}
+.driver-popover-footer-btn:hover,
+.driver-popover-footer-btn:focus {
+  background-color: var(--overlay);
+}
+.driver-popover-navigation-btns button:last-child {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.driver-popover-navigation-btns button:last-child:hover,
+.driver-popover-navigation-btns button:last-child:focus {
+  background-color: var(--accent);
+  filter: brightness(1.1);
+}
+.driver-popover-close-btn {
+  color: var(--text-faint);
+}
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus {
+  color: var(--text);
+}
+
+/* The arrow is a bordered triangle, so its fill lives on one border side per
+   direction and has to be restated rather than set once. */
+.driver-popover-arrow-side-left {
+  border-left-color: var(--overlay);
+}
+.driver-popover-arrow-side-right {
+  border-right-color: var(--overlay);
+}
+.driver-popover-arrow-side-top {
+  border-top-color: var(--overlay);
+}
+.driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--overlay);
+}
