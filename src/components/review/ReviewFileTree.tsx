@@ -184,11 +184,23 @@ function SessionGroupSection({
   }
 
   return (
-    <section className="mb-3 last:mb-0">
+    <section className="mb-4 last:mb-0">
+      {/*
+        The heading is a label, not another row.
+
+        It used to be a 12px medium string sitting one pixel of weight away from the
+        filenames beneath it, so the rail read as one long list that occasionally
+        changed subject. Ink colour, wider tracking and a gap below it separate the
+        two registers: this names a conversation, those are files.
+      */}
       <div className="flex items-center gap-1 py-1 pl-2 pr-1.5">
         <span
-          className="min-w-0 flex-1 truncate text-xs font-medium text-text"
-          title={group.tabId ? `Changes from "${group.title}"` : 'Changes with no open session'}
+          className="min-w-0 flex-1 truncate text-xs font-semibold tracking-wide text-ink"
+          title={
+            group.tabId
+              ? `Changes from "${group.title}"`
+              : 'Changes with no live session — these files were edited by a session that is closed, or found in git. You can read and comment on them, but there is nowhere to send the comments.'
+          }
         >
           {group.title}
         </span>

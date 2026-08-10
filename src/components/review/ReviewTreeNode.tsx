@@ -112,8 +112,11 @@ function FileRow({
       aria-current={active ? 'true' : undefined}
       title={file.path}
       style={{ paddingLeft: 8 + depth * 12 }}
+      // `py-2` rather than `py-1`: a filename, a dot, a count and a timestamp on one
+      // 22px line read as a spreadsheet row. The extra 4px above and below is what
+      // makes each file an object you can aim at (Fitts) instead of a line of text.
       className={cn(
-        'flex w-full items-center gap-2 py-1 pr-2 text-left transition-colors',
+        'flex w-full items-center gap-2 py-2 pr-2 text-left transition-colors',
         active ? 'bg-accent-wash' : 'hover:bg-surface',
       )}
     >
@@ -142,9 +145,13 @@ function FileRow({
         {name}
       </span>
 
+      {/* The same accent-wash chip as everywhere else it appears (the "sent" tag,
+          the header's change counts) — it was a sharp-cornered `rounded-sm` box,
+          which made one shape in the rail that belonged to no family. */}
       {unresolved > 0 ? (
         <span
-          className="shrink-0 rounded-sm bg-accent-wash px-1 text-xs tabular-nums text-text"
+          className="hand-sm-1 shrink-0 bg-accent-wash px-1.5 py-0.5 text-xs
+                     font-medium tabular-nums text-text"
           title={`${unresolved} unresolved comment${unresolved === 1 ? '' : 's'}`}
         >
           {unresolved}

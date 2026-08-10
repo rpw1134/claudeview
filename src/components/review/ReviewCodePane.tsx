@@ -1,14 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Trash2, X } from 'lucide-react'
 import type { ReviewFile } from '@shared/ipc'
-import { excerptFrom, type ReviewComment } from '@/stores/reviewStore'
+import { excerptFrom, useReviewStore, type ReviewComment } from '@/stores/reviewStore'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { CodeLine } from './CodeLine'
 import { CommentComposer } from './CommentComposer'
 import { CommentRow } from './CommentRow'
 import { highlightFile, MAX_LINES } from './highlight'
-import { markMap, summarizeMarks, useReviewFile } from './useReviewFile'
+import { countMarks, markMap, useReviewFile } from './useReviewFile'
 
 /**
  * The file under review: header, then line-numbered read-only code.
@@ -39,6 +39,18 @@ export function ReviewCodePane({
   const { body, loading, missing } = useReviewFile(file.path, file.lastChangedAt)
   const [selection, setSelection] = useState<{ anchor: number; head: number } | null>(null)
   const dragging = useRef(false)
+
+  /*
+   * Has this user ever written a comment, anywhere?
+   *
+   * The one-line hint below the header teaches the gutter click, which nobody was
+   * finding on their own. It is scoped to *ever*, not to this file: once you have
+   * written a single comment you know how, and a permanent instruction you have
+   * already followed is noise sitting on top of the code. Selecting the boolean
+   * rather than the array keeps this from re-rendering the pane on every keystroke
+   * that lands in the store.
+   */
+  const neverCommented = useReviewStore((state) => state.comments.length === 0)
 
   // A drag can end anywhere — over the header, outside the window — so the
   // release is watched globally rather than on the rows it started in.
@@ -76,7 +88,7 @@ export function ReviewCodePane({
     [file.path, content],
   )
   const lineKinds = useMemo(() => markMap(body?.marks ?? []), [body])
-  const summary = summarizeMarks(body?.marks ?? [])
+  const counts = countMarks(body?.marks ?? [])
 
   const commentsByLine = useMemo(() => {
     const byLine = new Map<number, ReviewComment[]>()
@@ -99,7 +111,7 @@ export function ReviewCodePane({
     <PaneHeader
       file={file}
       sessionTitle={sessionTitle}
-      summary={summary}
+      counts={counts}
       onDismiss={onDismiss}
     />
   )
@@ -152,6 +164,19 @@ export function ReviewCodePane({
 
   return (
     <Pane header={header}>
+      {/*
+        The one piece of instruction on this surface, and it retires itself.
+        Commenting is a gutter click, which is the convention everywhere code is
+        reviewed and is still invisible until you try it — the hover `+` shows the
+        target, this names the gesture. Faint, one line, above the code rather than
+        floating over it.
+      */}
+      {neverCommented ? (
+        <p className="shrink-0 border-b border-line px-4 py-1 text-xs text-text-faint">
+          Click a line number to comment — drag for a range.
+        </p>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-auto py-2">
         {highlighted.lines.map((html, index) => {
           const number = index + 1
@@ -238,6 +263,35 @@ function Pane({ header, children }: { header: React.ReactNode; children: React.R
   )
 }
 
+/**
+ * A change count, tinted to match the gutter bar it counts.
+ *
+ * The sigil is inside the pill, not replaced by it: `+` and `~` carry the meaning
+ * on their own, so the tint is reinforcement rather than the only signal. The
+ * `title` spells it out for anyone who hasn't met the shorthand.
+ */
+function CountPill({
+  className,
+  label,
+  children,
+}: {
+  className: string
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <span
+      title={label}
+      className={cn(
+        'hand-sm-1 px-1.5 py-0.5 font-mono text-xs tabular-nums',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
 function Notice({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
@@ -249,6 +303,15 @@ function Notice({ children }: { children: React.ReactNode }) {
 /**
  * Path, owner, change summary, dismiss.
  *
+ * The filename is the title of this view and now reads like one — `text-sm`,
+ * medium weight. It was set at the same size and weight as the timestamps beside
+ * it, which left the pane with no first thing to look at.
+ *
+ * The change summary is two tinted pills rather than a run of `+9 · ~8` grey
+ * monospace. Same two numbers, but the fill puts them in the same visual family as
+ * the gutter bars they are counting, so the header and the code agree about what
+ * green and ochre mean here.
+ *
  * Dismissal confirms **in place**: the trash icon swaps into a "Dismiss? ✓ ✕" row
  * for three seconds. A modal for this would be heavier than the action — it drops
  * one file from a list and the next edit brings it back — but it still deserves a
@@ -257,12 +320,12 @@ function Notice({ children }: { children: React.ReactNode }) {
 function PaneHeader({
   file,
   sessionTitle,
-  summary,
+  counts,
   onDismiss,
 }: {
   file: ReviewFile
   sessionTitle?: string
-  summary: string
+  counts: { added: number; modified: number }
   onDismiss: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -277,7 +340,7 @@ function PaneHeader({
     <div className="flex h-11 shrink-0 items-center gap-3 border-b border-line px-4">
       <span
         className={cn(
-          'min-w-0 truncate font-mono text-xs',
+          'min-w-0 truncate font-mono text-sm font-medium',
           file.deleted ? 'text-danger' : 'text-text',
         )}
         title={file.path}
@@ -289,8 +352,23 @@ function PaneHeader({
         <span className="min-w-0 shrink truncate text-xs text-text-faint">{sessionTitle}</span>
       ) : null}
 
-      <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-text-faint">
-        {summary}
+      <span className="ml-auto flex shrink-0 items-center gap-1">
+        {counts.added > 0 ? (
+          <CountPill
+            className="bg-success/15 text-text"
+            label={`${counts.added} line${counts.added === 1 ? '' : 's'} added`}
+          >
+            +{counts.added}
+          </CountPill>
+        ) : null}
+        {counts.modified > 0 ? (
+          <CountPill
+            className="bg-accent-wash text-text"
+            label={`${counts.modified} line${counts.modified === 1 ? '' : 's'} modified`}
+          >
+            ~{counts.modified}
+          </CountPill>
+        ) : null}
       </span>
 
       {confirming ? (

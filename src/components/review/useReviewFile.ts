@@ -80,17 +80,21 @@ export function markMap(marks: ReviewLineMark[]): Map<number, ReviewLineMark['ki
   return byLine
 }
 
-/** "+12 · ~5" — the whole file's change summary, in one glance. */
-export function summarizeMarks(marks: ReviewLineMark[]): string {
+/**
+ * The whole file's change summary, as two numbers.
+ *
+ * Counts rather than a pre-joined `"+12 · ~5"` string: the header renders them as
+ * two separately tinted pills (success for added, accent for modified), and a
+ * string would have had the header parse back out what this function just threw
+ * away. Each pill still carries its own `+`/`~` sigil, so the hue is never the
+ * only thing distinguishing them.
+ */
+export function countMarks(marks: ReviewLineMark[]): { added: number; modified: number } {
   let added = 0
   let modified = 0
   for (const mark of marks) {
     if (mark.kind === 'added') added += mark.count
     else modified += mark.count
   }
-  if (added === 0 && modified === 0) return ''
-  const parts: string[] = []
-  if (added > 0) parts.push(`+${added}`)
-  if (modified > 0) parts.push(`~${modified}`)
-  return parts.join(' · ')
+  return { added, modified }
 }

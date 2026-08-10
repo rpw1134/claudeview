@@ -11,6 +11,11 @@ import { Button } from '@/components/ui/Button'
  * it, and lands exactly where the finished comment will sit — so the transition
  * from writing to written moves nothing on screen.
  *
+ * It wears the finished comment's clothes for the same reason: uneven corners, the
+ * `surface` fill, the accent spine down the left edge. Writing and written are the
+ * same object in two states, so submitting changes the words and nothing else —
+ * no fill swap, no shift, no re-reading where the note went.
+ *
  * Enter submits and Shift+Enter makes a newline, matching the session composer.
  * Two places to type in one app must not disagree about what Enter does.
  */
@@ -41,7 +46,7 @@ export function CommentComposer({
   const range = startLine === endLine ? `line ${startLine}` : `lines ${startLine}–${endLine}`
 
   return (
-    <div data-focus-host className="hand-sm-1 bg-raised px-3 py-2">
+    <div data-focus-host className="hand-sm-1 border-l-2 border-accent bg-surface px-3 py-2">
       <textarea
         ref={textareaRef}
         value={text}
