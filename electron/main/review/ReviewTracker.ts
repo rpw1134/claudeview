@@ -131,6 +131,25 @@ export class ReviewTracker {
   private readonly entries = new Map<string, Entry>()
   /** Memoized `isGitRepo` per root; the answer doesn't change under us. */
   private readonly repoChecks = new Map<string, Promise<boolean>>()
+  /**
+   * Ambient dirt, per root: what `git status` already reported before any
+   * session-era change — the user's own uncommitted work.
+   *
+   * The poll's first sweep of a root *indexes* instead of adopting: every dirty
+   * path is recorded here with its stat, and adoption only happens when a path
+   * is missing from the index or its stat has moved since. Without this, opening
+   * a session in a repo with uncommitted work instantly "reviewed" all of it —
+   * files no agent had touched. Dismissing a git-detected file writes its
+   * current stat back into the index, which is what makes dismissal stick: the
+   * file is still dirty in git's eyes, but review now considers that state
+   * ambient until it changes again.
+   *
+   * `null` stat means "dirty but unstatable" (deleted while dirty).
+   */
+  private readonly ambientDirt = new Map<
+    string,
+    Map<string, { size: number; mtimeMs: number } | null>
+  >()
   private timer: NodeJS.Timeout | null = null
   private polling = false
   private seq = 0
@@ -168,6 +187,7 @@ export class ReviewTracker {
     this.saveTimer = null
     this.entries.clear()
     this.repoChecks.clear()
+    this.ambientDirt.clear()
   }
 
   /**
@@ -247,22 +267,39 @@ export class ReviewTracker {
    * Losing the baseline *is* the re-baseline: the next edit to a dismissed file
    * snapshots it afresh, so "reviewed and accepted" means the next diff starts
    * from what you accepted rather than replaying changes you already read.
+   *
+   * The dismissed file's current stat is also written into the ambient index —
+   * to git it's still dirty, and without this the very next poll would re-adopt
+   * what the user just dismissed, five seconds after they dismissed it.
    */
   dismiss(paths: string[]): void {
     let changed = false
     for (const target of paths) {
+      const entry = this.entries.get(target)
       if (!this.entries.delete(target)) continue
       changed = true
       removeBaselineFile(target)
+      if (entry) this.recordAmbient(entry.file.root, target)
     }
     if (changed) this.push()
   }
 
   dismissAll(): void {
     if (this.entries.size === 0) return
-    for (const target of this.entries.keys()) removeBaselineFile(target)
+    for (const [target, entry] of this.entries) {
+      removeBaselineFile(target)
+      this.recordAmbient(entry.file.root, target)
+    }
     this.entries.clear()
     this.push()
+  }
+
+  /** Mark a path's current on-disk state as ambient — reviewed, or never ours. */
+  private recordAmbient(root: string, target: string): void {
+    const ambient = this.ambientDirt.get(root)
+    if (!ambient) return
+    const stat = statOrNull(target)
+    ambient.set(target, stat ? { size: stat.size, mtimeMs: stat.mtimeMs } : null)
   }
 
   /**
@@ -351,6 +388,14 @@ export class ReviewTracker {
   private async poll(): Promise<void> {
     if (this.polling) return
     const roots = [...new Set(this.liveRoots())]
+
+    // A root that stopped being live loses its ambient index: by the time it's
+    // live again, the user may have edited freely in between, and that work is
+    // new ambient dirt to re-index — not agent changes to adopt. Pruned here,
+    // before the early return, so it happens on the tick after liveness ends.
+    for (const key of this.ambientDirt.keys()) {
+      if (!roots.includes(key)) this.ambientDirt.delete(key)
+    }
     if (roots.length === 0) return
 
     this.polling = true
@@ -367,11 +412,45 @@ export class ReviewTracker {
   }
 
   private async pollRoot(root: string): Promise<boolean> {
-    let changed = false
+    const status = await statusPorcelain(root)
 
-    for (const change of await statusPorcelain(root)) {
+    /*
+     * First sweep for this root: index, don't adopt. Everything git reports
+     * dirty right now predates any change this session era could have made —
+     * it's the user's own uncommitted work, and putting it in front of them as
+     * "the agent changed this" was exactly wrong.
+     */
+    let ambient = this.ambientDirt.get(root)
+    if (!ambient) {
+      ambient = new Map()
+      for (const change of status) {
+        const target = path.resolve(root, change.relPath)
+        if (isIgnored(target) || this.entries.has(target)) continue
+        const stat = statOrNull(target)
+        ambient.set(target, stat ? { size: stat.size, mtimeMs: stat.mtimeMs } : null)
+      }
+      this.ambientDirt.set(root, ambient)
+      return false
+    }
+
+    let changed = false
+    for (const change of status) {
       const target = path.resolve(root, change.relPath)
       if (isIgnored(target) || this.entries.has(target)) continue
+
+      // Known ambient dirt that hasn't moved is still the user's, not review's.
+      const recorded = ambient.get(target)
+      if (recorded !== undefined) {
+        const stat = statOrNull(target)
+        const unchanged =
+          recorded === null
+            ? stat === null
+            : stat !== null && stat.size === recorded.size && stat.mtimeMs === recorded.mtimeMs
+        if (unchanged) continue
+        // It moved during the session era — it's a real change now. Drop the
+        // ambient record so future polls treat it like any tracked file.
+        ambient.delete(target)
+      }
 
       // Untracked files have no HEAD blob, so their baseline is "did not exist".
       const baseline = change.code.includes('?')
