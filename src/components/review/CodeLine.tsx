@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { MessageSquare } from 'lucide-react'
 import type { ReviewLineMark } from '@shared/ipc'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +38,20 @@ import { cn } from '@/lib/utils'
  * mousedown: clicking the `+` *is* clicking the line number, and it takes part in
  * shift-click and drag ranges without knowing they exist.
  *
+ * ## The comment marker
+ *
+ * A fixed-width slot sits between the number cell and the mark bar, on every row,
+ * whether or not the line has comments — reserving the width there rather than only
+ * on rows that need it keeps the mark bar and the code column starting at the same
+ * x on every line. Only lines with comments render a button into it: the
+ * `MessageSquare` glyph, plus the count once there's more than one to distinguish
+ * from a single unread note. Unlike the gutter cell, this button *is* a real tab
+ * stop — it only exists on the handful of rows that have something to toggle, so it
+ * never reproduces the "5000 tab stops" problem the gutter is written to avoid.
+ * Colour carries resolution state (`text-accent` while unresolved, `text-faint`
+ * once every comment on the line is resolved) but `aria-pressed` and the label are
+ * the real signal for anyone not reading colour.
+ *
  * ## The `dangerouslySetInnerHTML`
  *
  * `html` is hljs output, which escapes every character of the source and emits
@@ -48,15 +63,25 @@ export const CodeLine = memo(function CodeLine({
   html,
   kind,
   selected,
+  commentCount,
+  hasUnresolved,
+  commentsExpanded,
   onGutterMouseDown,
   onGutterMouseEnter,
+  onToggleComments,
 }: {
   number: number
   html: string
   kind: ReviewLineMark['kind'] | undefined
   selected: boolean
+  /** How many comments are anchored to this line — 0 renders no marker. */
+  commentCount: number
+  hasUnresolved: boolean
+  /** Whether this line's comments are currently rendered below it. */
+  commentsExpanded: boolean
   onGutterMouseDown: (line: number, shiftKey: boolean) => void
   onGutterMouseEnter: (line: number) => void
+  onToggleComments: (line: number) => void
 }) {
   return (
     // `w-max min-w-full`: a long line widens the row, and the scroll container
@@ -107,6 +132,26 @@ export const CodeLine = memo(function CodeLine({
           +
         </span>
         {number}
+      </div>
+
+      <div className="flex w-5 shrink-0 items-center justify-center">
+        {commentCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => onToggleComments(number)}
+            aria-pressed={commentsExpanded}
+            aria-label={`${commentsExpanded ? 'Hide' : 'Show'} ${commentCount} comment${commentCount === 1 ? '' : 's'} on line ${number}`}
+            title={`${commentCount} comment${commentCount === 1 ? '' : 's'}`}
+            className={cn(
+              'flex items-center gap-0.5 leading-none tabular-nums transition-colors',
+              'text-[10px] hover:text-text',
+              hasUnresolved ? 'text-accent' : 'text-text-faint',
+            )}
+          >
+            <MessageSquare size={11} />
+            {commentCount > 1 ? commentCount : null}
+          </button>
+        ) : null}
       </div>
 
       <div

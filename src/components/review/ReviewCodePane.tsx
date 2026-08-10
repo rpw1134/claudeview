@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Trash2, X } from 'lucide-react'
+import { Check, MessageSquare, Trash2, X } from 'lucide-react'
 import type { ReviewFile } from '@shared/ipc'
 import { excerptFrom, useReviewStore, type ReviewComment } from '@/stores/reviewStore'
 import { Button } from '@/components/ui/Button'
@@ -39,6 +39,31 @@ export function ReviewCodePane({
   const { body, loading, missing } = useReviewFile(file.path, file.lastChangedAt)
   const [selection, setSelection] = useState<{ anchor: number; head: number } | null>(null)
   const dragging = useRef(false)
+
+  /*
+   * The global show/hide, and the per-line overrides it doesn't erase.
+   *
+   * `commentsVisible` is the master switch: off, no comment rows render anywhere
+   * in the pane, though the gutter markers stay so you know they exist. On, every
+   * line with comments defaults to expanded — `collapsedLines` only records the
+   * lines a click has *removed* from that default, so a line you collapsed stays
+   * collapsed if you flip the master switch off and back on, but nothing needs an
+   * entry just to be shown. Both are pane-local: `ReviewCodePane` remounts per
+   * file (see `ReviewView`), so switching files resets both for free.
+   */
+  const [commentsVisible, setCommentsVisible] = useState(() =>
+    comments.some((comment) => !comment.resolved),
+  )
+  const [collapsedLines, setCollapsedLines] = useState<Set<number>>(() => new Set())
+
+  const onToggleLineComments = useCallback((line: number) => {
+    setCollapsedLines((current) => {
+      const next = new Set(current)
+      if (next.has(line)) next.delete(line)
+      else next.add(line)
+      return next
+    })
+  }, [])
 
   /*
    * Has this user ever written a comment, anywhere?
@@ -112,6 +137,9 @@ export function ReviewCodePane({
       file={file}
       sessionTitle={sessionTitle}
       counts={counts}
+      commentCount={comments.length}
+      commentsVisible={commentsVisible}
+      onToggleCommentsVisible={() => setCommentsVisible((visible) => !visible)}
       onDismiss={onDismiss}
     />
   )
@@ -182,6 +210,10 @@ export function ReviewCodePane({
           const number = index + 1
           const lineComments = commentsByLine.get(number)
           const composing = range?.end === number
+          // A line defaults open the moment its comments become visible; a click
+          // on its marker is the only thing that can remove it from that default.
+          const lineExpanded = !collapsedLines.has(number)
+          const showRows = commentsVisible && lineExpanded && !!lineComments
 
           return (
             <Fragment key={number}>
@@ -190,46 +222,70 @@ export function ReviewCodePane({
                 html={html}
                 kind={lineKinds.get(number)}
                 selected={range !== null && number >= range.start && number <= range.end}
+                commentCount={lineComments?.length ?? 0}
+                hasUnresolved={lineComments?.some((comment) => !comment.resolved) ?? false}
+                commentsExpanded={showRows}
                 onGutterMouseDown={onGutterMouseDown}
                 onGutterMouseEnter={onGutterMouseEnter}
+                onToggleComments={onToggleLineComments}
               />
 
-              {lineComments || composing ? (
+              {showRows || composing ? (
                 // `sticky left-0`: code rows are as wide as their longest line, so
                 // a horizontally scrolled file would otherwise carry its comments
-                // off to the left with the origin.
-                <div className="sticky left-0 min-w-0 space-y-1 py-1 pl-14 pr-4">
-                  {lineComments?.map((comment) => (
-                    <CommentRow
-                      key={comment.id}
-                      comment={comment}
-                      onToggleResolved={() => onToggleResolved(comment.id)}
-                      onDelete={() => onDeleteComment(comment.id)}
-                    />
-                  ))}
-                  {composing && range ? (
-                    <CommentComposer
-                      startLine={range.start}
-                      endLine={range.end}
-                      onCancel={() => setSelection(null)}
-                      onSubmit={(text) => {
-                        onAddComment({
-                          startLine: range.start,
-                          endLine: range.end,
-                          excerpt: excerptFrom(content.split('\n')[range.start - 1]),
-                          text,
-                        })
-                        setSelection(null)
-                      }}
-                    />
-                  ) : null}
+                // off to the left with the origin. The single hairline sits at the
+                // gutter edge (`pl-14` on the outer, `pl-3` inside it, matching
+                // `CodeLine`'s own gutter-to-text offset) rather than a drawn box.
+                <div className="sticky left-0 min-w-0 pl-14 pr-4">
+                  <div className="space-y-1 border-l border-line py-1 pl-3">
+                    {showRows
+                      ? lineComments?.map((comment) => (
+                          <CommentRow
+                            key={comment.id}
+                            comment={comment}
+                            onToggleResolved={() => onToggleResolved(comment.id)}
+                            onDelete={() => onDeleteComment(comment.id)}
+                          />
+                        ))
+                      : null}
+                    {composing && range ? (
+                      <CommentComposer
+                        startLine={range.start}
+                        endLine={range.end}
+                        onCancel={() => setSelection(null)}
+                        onSubmit={(text) => {
+                          onAddComment({
+                            startLine: range.start,
+                            endLine: range.end,
+                            excerpt: excerptFrom(content.split('\n')[range.start - 1]),
+                            text,
+                          })
+                          /*
+                           * Writing a comment is the strongest possible signal
+                           * you want to see comments. Without this, a file whose
+                           * first comment you just wrote (visibility initialized
+                           * false) swallowed it on Enter — written, saved, and
+                           * instantly invisible.
+                           */
+                          setCommentsVisible(true)
+                          setCollapsedLines((current) => {
+                            if (!current.has(range.end)) return current
+                            const next = new Set(current)
+                            next.delete(range.end)
+                            return next
+                          })
+                          setSelection(null)
+                        }}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </Fragment>
           )
         })}
 
-        {orphans.length > 0 ? (
+        {commentsVisible && orphans.length > 0 ? (
           <div className="space-y-1 px-4 py-3">
             <p className="text-xs text-text-faint">Comments on lines that no longer exist</p>
             {orphans.map((comment) => (
@@ -238,6 +294,7 @@ export function ReviewCodePane({
                 comment={comment}
                 onToggleResolved={() => onToggleResolved(comment.id)}
                 onDelete={() => onDeleteComment(comment.id)}
+                showMeta
               />
             ))}
           </div>
@@ -316,16 +373,26 @@ function Notice({ children }: { children: React.ReactNode }) {
  * for three seconds. A modal for this would be heavier than the action — it drops
  * one file from a list and the next edit brings it back — but it still deserves a
  * second beat, because the thing it silently discards is your place in the review.
+ *
+ * The comments toggle only appears once the file has any — nothing to show or hide
+ * otherwise. `aria-pressed` and the title (`Show comments — N`) carry the state;
+ * the accent tint on the icon is reinforcement, not the only signal.
  */
 function PaneHeader({
   file,
   sessionTitle,
   counts,
+  commentCount,
+  commentsVisible,
+  onToggleCommentsVisible,
   onDismiss,
 }: {
   file: ReviewFile
   sessionTitle?: string
   counts: { added: number; modified: number }
+  commentCount: number
+  commentsVisible: boolean
+  onToggleCommentsVisible: () => void
   onDismiss: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -370,6 +437,20 @@ function PaneHeader({
           </CountPill>
         ) : null}
       </span>
+
+      {commentCount > 0 ? (
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-pressed={commentsVisible}
+          aria-label={commentsVisible ? 'Hide comments' : 'Show comments'}
+          title={`Show comments — ${commentCount}`}
+          onClick={onToggleCommentsVisible}
+          className={commentsVisible ? 'text-accent hover:text-accent' : undefined}
+        >
+          <MessageSquare size={13} />
+        </Button>
+      ) : null}
 
       {confirming ? (
         <span className="flex shrink-0 items-center gap-1">
