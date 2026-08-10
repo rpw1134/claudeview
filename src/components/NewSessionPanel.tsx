@@ -4,12 +4,12 @@ import {
   FolderOpen,
   Loader2,
   Search,
-  SlidersHorizontal,
   SquareTerminal,
   X,
 } from 'lucide-react'
 import type { SessionSummary } from '@shared/ipc'
 import { api } from '@/lib/api'
+import { daypartGreeting, useProfileStore } from '@/stores/profileStore'
 import { Mark, Wordmark } from './Mark'
 import { SketchRule } from './Sketch'
 import { Button } from './ui/Button'
@@ -17,16 +17,15 @@ import { Segmented } from './ui/Field'
 import { cn, shortenPath, timeAgo } from '@/lib/utils'
 
 /**
- * Landing screen: pick a directory, then start something in it — or step
- * sideways into Claude config.
+ * Landing screen: a greeting, a directory, and the way back in.
  *
- * ## Two destinations, one page
+ * ## One register at a time
  *
- * Everything in the body is about *sessions* and is scoped by the directory
- * control. Config is a different surface entirely (it has its own scope picker),
- * so its entry point sits apart in the top corner as a quiet ghost action —
- * discoverable on the first visit, invisible to the eye that came here to start
- * a session. Same toggle as Opt+K and the toolbar button.
+ * An earlier version opened with a wordmark, a tagline, a config entry, a
+ * shortcut cheat-sheet, and an always-on search row — five things talking at
+ * once before the page's actual job appeared. The tabs above already carry
+ * navigation, and the first-run tour teaches the shortcuts, so this page keeps
+ * exactly one large element (the greeting) and lets everything else recede.
  *
  * ## Why it isn't a centred card any more
  *
@@ -52,13 +51,12 @@ export function NewSessionPanel({
   home,
   onStart,
   onStartTerminal,
-  onOpenConfig,
 }: {
   home?: string
   onStart: (options: { cwd?: string; resume?: string; title?: string }) => void
   onStartTerminal: (cwd?: string) => void
-  onOpenConfig: () => void
 }) {
+  const name = useProfileStore((state) => state.name)
   const [cwd, setCwd] = useState<string | undefined>(undefined)
   const [scope, setScope] = useState<'all' | 'cwd'>('all')
   const [sessions, setSessions] = useState<SessionSummary[]>([])
@@ -100,25 +98,20 @@ export function NewSessionPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl px-10 py-12 lg:py-16">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Wordmark />
-            <p className="mt-3 max-w-[58ch] text-sm leading-relaxed text-text-muted">
-              Hit your stride with Claude Code — sessions and terminals side by side,
-              and every change your agents make queued up for review.
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={onOpenConfig}
-            title="Agents, skills, and hooks — ⌥K"
-            className="shrink-0"
-          >
-            <SlidersHorizontal size={14} />
-            Claude config
-          </Button>
-        </div>
+        {/*
+         * One register at a time. The old header stacked a wordmark, a value
+         * proposition, and a duplicate config entry (the tabs above already
+         * carry it) before the page's actual job appeared. Now: the greeting is
+         * the page's single large element — plain type, no display face — and
+         * everything else recedes beneath it.
+         */}
+        <Wordmark className="opacity-90" />
+        <h1 className="mt-8 text-2xl font-semibold tracking-tight text-text">
+          {name ? `${daypartGreeting()}, ${name}.` : 'Where to?'}
+        </h1>
+        <p className="mt-2 text-sm text-text-muted">
+          Start a session in a directory, or pick up where you left off.
+        </p>
 
         {/*
           The directory comes first because it scopes everything under it — the new
@@ -126,11 +119,12 @@ export function NewSessionPanel({
           read-only field plus a "Choose": the value and the way to change it are the
           same target, which is fewer elements and a much larger hit area.
         */}
-        <div className="mt-12 flex flex-wrap items-end gap-3">
+        <div className="mt-8 flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 basis-80">
             <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">Working directory</h2>
             <button
               onClick={pickDirectory}
+              data-tour="directory"
               className="hand-1 group mt-1.5 flex h-12 w-full items-center gap-3 bg-surface px-3.5
                          text-left transition-colors hover:bg-raised"
             >
@@ -151,71 +145,79 @@ export function NewSessionPanel({
           </div>
 
           <div className="flex gap-2">
-            <Button variant="primary" size="lg" onClick={() => onStart({ cwd })} className="h-12 px-5">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => onStart({ cwd })}
+              data-tour="new-session"
+              className="h-12 px-5"
+            >
               <Mark state="idle" size={17} />
               New session
             </Button>
             {/* Secondary, not primary: a terminal is the supporting act here. */}
-            <Button variant="outline" size="lg" onClick={() => onStartTerminal(cwd)} className="h-12">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => onStartTerminal(cwd)}
+              data-tour="new-terminal"
+              className="h-12"
+            >
               <SquareTerminal size={16} />
               Terminal
             </Button>
           </div>
         </div>
 
-        <p className="mt-3 text-xs text-text-faint">
-          ⌥T new session · ⌥C new terminal · ⌥A / ⌥S split · ⌥Tab switch · ⌥K config · ⌥R review
-        </p>
-
-        <section className="mt-14">
-          <h2 className="font-display text-xl text-text">pick up where you left off</h2>
+        <section className="mt-12">
+          <h2 className="text-sm font-medium text-text">Recent sessions</h2>
 
           {/*
-            Search is a real control, always present, sized like something you're
-            meant to type in. It used to appear only past eight sessions, which meant
-            the one moment you'd reach for it — a long list — was also the first time
-            you'd ever seen it.
+            Search and scope earn their place: below a handful of sessions they
+            are two extra controls answering a question nobody has asked yet.
+            They appear together once the list is long enough to need them.
           */}
-          <div className="mt-3 flex items-center gap-2">
-            <div
-              className="hand-1 flex h-11 min-w-0 flex-1 items-center gap-2.5 bg-surface px-3.5
-                         transition-colors focus-within:bg-raised
-                         focus-within:ring-1 focus-within:ring-accent/40"
-            >
-              <Search size={16} className="shrink-0 text-text-faint" aria-hidden />
-              <input
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Search your sessions"
-                aria-label="Search sessions"
-                className="min-w-0 flex-1 border-none bg-transparent text-sm text-text
-                           outline-none placeholder:text-text-faint"
+          {sessions.length > 6 ? (
+            <div className="mt-3 flex items-center gap-2">
+              <div
+                className="hand-1 flex h-10 min-w-0 flex-1 items-center gap-2.5 bg-surface px-3.5
+                           transition-colors focus-within:bg-raised
+                           focus-within:ring-1 focus-within:ring-accent/40"
+              >
+                <Search size={15} className="shrink-0 text-text-faint" aria-hidden />
+                <input
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="Search your sessions"
+                  aria-label="Search sessions"
+                  className="min-w-0 flex-1 border-none bg-transparent text-sm text-text
+                             outline-none placeholder:text-text-faint"
+                />
+                {filter ? (
+                  <button
+                    onClick={() => setFilter('')}
+                    aria-label="Clear search"
+                    className="hand-sm-1 shrink-0 p-1 text-text-faint transition-colors hover:text-text"
+                  >
+                    <X size={13} />
+                  </button>
+                ) : null}
+              </div>
+              <Segmented
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { value: 'all', label: 'All projects' },
+                  { value: 'cwd', label: 'This directory' },
+                ]}
+                className="h-10"
+                aria-label="Scope sessions"
               />
-              {filter ? (
-                <button
-                  onClick={() => setFilter('')}
-                  aria-label="Clear search"
-                  className="hand-sm-1 shrink-0 p-1 text-text-faint transition-colors hover:text-text"
-                >
-                  <X size={13} />
-                </button>
-              ) : null}
             </div>
-            {/* Two visible options, not a dropdown: with the alternatives always
-                on screen the current scope never needs decoding, and there's no
-                native menu chrome interrupting the page's own material. */}
-            <Segmented
-              value={scope}
-              onChange={setScope}
-              options={[
-                { value: 'all', label: 'All projects' },
-                { value: 'cwd', label: 'This directory' },
-              ]}
-              className="h-11"
-              aria-label="Scope sessions"
-            />
-          </div>
+          ) : null}
 
+          {/* The drawn rule stays: this is what "hand as accent" means — one
+              quiet stroke marking a section, not a voice for headings. */}
           <SketchRule className="mb-1 mt-4 text-ink-faint" />
 
           {loading ? (

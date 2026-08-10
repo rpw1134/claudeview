@@ -110,12 +110,19 @@ export const Mark = memo(function Mark({
   )
 })
 
-/** The wordmark: the mark plus the app name in the written face. */
+/**
+ * The wordmark: the mark plus the app name.
+ *
+ * The name is set in the plain body face, deliberately. The drawn asterisk is
+ * the brand's one piece of hand; a handwritten name *next to* a hand-drawn mark
+ * was two voices saying the same thing, and the louder one was the less
+ * legible. Accent lives in the mark, structure lives in the type.
+ */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cn('flex items-baseline gap-2.5', className)}>
-      <Mark state="idle" size={28} className="translate-y-1 text-accent" />
-      <span className="font-display text-3xl tracking-tight text-text">Stryde</span>
+    <span className={cn('flex items-center gap-2', className)}>
+      <Mark state="idle" size={22} className="text-accent" />
+      <span className="text-xl font-semibold tracking-tight text-text">Stryde</span>
     </span>
   )
 }
