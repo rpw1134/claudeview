@@ -1,11 +1,9 @@
 import {
   Columns2,
-  GitPullRequestArrow,
   LayoutGrid,
   MessageSquarePlus,
   Rows2,
   Settings2,
-  SlidersHorizontal,
   SquareTerminal,
 } from 'lucide-react'
 import { MAX_PANELS } from '@/stores/workspaceStore'
@@ -14,58 +12,55 @@ import type { SplitDirection } from '@/lib/layoutTree'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
 
+/** The three top-level surfaces, navigated as tabs. */
+export type Surface = 'sessions' | 'review' | 'config'
+
 /**
- * Window toolbar: add panels, tidy the layout, open settings.
+ * Window toolbar: surface tabs on the left of the control cluster, panel
+ * management and settings on the right.
+ *
+ * ## Tabs, not toggles
+ *
+ * Navigation used to be asymmetric — config was a toggle that swapped the whole
+ * window, review was a "mode" behind an icon, and sessions were just "what's
+ * left" — three different mental models for one decision: *what am I looking
+ * at?* One tab strip answers it. Sessions and Review share a connected group
+ * because review is a lens on the sessions' work, not a sibling concern; Config
+ * sits apart after a gap because it is one.
+ *
+ * The Review tab only exists while there is something to review. A permanently
+ * visible empty destination teaches people to stop looking at it — the tab
+ * appearing *is* the signal that review has become relevant.
  *
  * ## Everything is flush right, and that's the point
  *
- * These controls used to start on the left, which on macOS means starting *after
- * the traffic lights* — 84px in, while panel content below begins at 48px (the
- * mosaic's 8px padding plus a panel's 40px gutter). No amount of tuning fixes that:
- * the OS owns the top-left corner and nothing can share it.
- *
- * So nothing tries. The left is empty drag region, the controls sit against the
- * right edge on the same vertical line as the content beneath them, and there is no
- * left-aligned chrome left to be misaligned.
- *
- * ## No fill
- *
- * The bar used to carry `bg-surface`, which put two stacked horizontal bands across
- * the top of the window — toolbar, then panel header — before any content. That's
- * two claims on the same piece of hierarchy. Dropping the fill leaves exactly one
- * labelled strip on screen (the panel header) and turns this into floating controls
- * over the window background.
- *
- * ## Icons only
- *
- * At one uniform size, matching the split controls. Text labels here competed with
- * panel titles directly below them at similar weight, for actions that already have
- * shortcuts — and the home screen teaches those shortcuts on first run.
- *
- * Doubles as the macOS drag region, so the title bar isn't wasted space.
+ * On macOS the OS owns the top-left corner (traffic lights), so left-aligned
+ * chrome can never line up with the content below it. Nothing tries: the left
+ * is empty drag region, controls sit against the right edge on the same
+ * vertical line as panel content.
  */
 export function WorkspaceBar({
   panelCount,
-  configActive,
-  reviewActive,
+  surface,
+  onSurface,
   onAddSession,
   onAddTerminal,
-  onToggleConfig,
-  onToggleReview,
   onBalance,
   onOpenSettings,
 }: {
   panelCount: number
-  configActive: boolean
-  reviewActive: boolean
+  surface: Surface
+  onSurface: (surface: Surface) => void
   onAddSession: (direction: SplitDirection) => void
   onAddTerminal: (direction: SplitDirection) => void
-  onToggleConfig: () => void
-  onToggleReview: () => void
   onBalance: () => void
   onOpenSettings: () => void
 }) {
   const atCapacity = panelCount >= MAX_PANELS
+  const reviewCount = useReviewStore((state) => state.files.length)
+  const hasUnviewed = useReviewStore((state) =>
+    state.files.some((file) => isUnviewed(file, state.viewedAt)),
+  )
 
   return (
     <div
@@ -74,11 +69,41 @@ export function WorkspaceBar({
       // control lands on the same vertical line as the content below it.
       className="flex h-12 shrink-0 items-center justify-end gap-0.5 pr-12"
     >
-      {/* Panel-management controls act on the mosaic, which is hidden while
-          config fills the window OR review mode has replaced it — in both cases
-          they'd mutate an invisible surface, so they're gone rather than merely
-          disabled. Only the mode toggles and settings survive every surface. */}
-      {configActive || reviewActive ? null : (
+      <nav
+        aria-label="Surface"
+        className="mr-2 flex items-center gap-2"
+      >
+        <div className="hand-sm-2 flex items-stretch gap-0.5 bg-surface p-0.5">
+          <SurfaceTab
+            label="Sessions"
+            selected={surface === 'sessions'}
+            title="Sessions"
+            onClick={() => onSurface('sessions')}
+          />
+          {reviewCount > 0 ? (
+            <SurfaceTab
+              label="Review"
+              selected={surface === 'review'}
+              title="Review — ⌥R"
+              onClick={() => onSurface('review')}
+              badge={reviewCount > 99 ? '99+' : String(reviewCount)}
+              badgeAccent={hasUnviewed}
+            />
+          ) : null}
+        </div>
+        <div className="hand-sm-2 flex items-stretch bg-surface p-0.5">
+          <SurfaceTab
+            label="Config"
+            selected={surface === 'config'}
+            title="Claude config — ⌥K"
+            onClick={() => onSurface('config')}
+          />
+        </div>
+      </nav>
+
+      {/* Panel-management controls act on the mosaic and are meaningless on any
+          other surface, so they're gone rather than merely disabled there. */}
+      {surface === 'sessions' ? (
         <>
           <Button
             variant="ghost"
@@ -100,30 +125,7 @@ export function WorkspaceBar({
           >
             <SquareTerminal size={15} />
           </Button>
-        </>
-      )}
 
-      {/* A toggle, not an add: config swaps the whole surface below and this
-          button is also the way back, mirroring the Opt+K command. */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onToggleConfig}
-        aria-label={configActive ? 'Back to workspace' : 'Claude config'}
-        aria-pressed={configActive}
-        title="Claude config — ⌥K"
-        className={configActive ? 'bg-accent-wash text-accent' : undefined}
-      >
-        <SlidersHorizontal size={15} />
-      </Button>
-
-      {/* Visible from every surface, like the config toggle: both mode switches
-          must be reachable by click from anywhere, or config becomes a dead end
-          you can only leave by the key you may not know. */}
-      <ReviewToggle active={reviewActive} onToggle={onToggleReview} />
-
-      {configActive ? null : (
-        <>
           <Divider />
 
           {/* Which way the next panel splits the focused one. Dragging can
@@ -159,18 +161,17 @@ export function WorkspaceBar({
           >
             <LayoutGrid size={15} />
           </Button>
+
+          <Divider />
+
+          {/* Only once you're near the ceiling. A permanent "0/8" is a number
+              nobody reads until it starts mattering. */}
+          {panelCount >= MAX_PANELS - 2 ? (
+            <span className="px-1 text-xs tabular-nums text-text-faint">
+              {panelCount}/{MAX_PANELS}
+            </span>
+          ) : null}
         </>
-      )}
-
-      <Divider />
-
-      {/* Only once you're near the ceiling, and only where the count means
-          anything. A permanent "0/8" is a number nobody reads until it starts
-          mattering. */}
-      {!configActive && panelCount >= MAX_PANELS - 2 ? (
-        <span className="px-1 text-xs tabular-nums text-text-faint">
-          {panelCount}/{MAX_PANELS}
-        </span>
       ) : null}
 
       <Button
@@ -186,50 +187,53 @@ export function WorkspaceBar({
   )
 }
 
-function Divider() {
-  return <div className="mx-1.5 h-4 w-px bg-line" aria-hidden />
-}
-
 /**
- * The review toggle carries a live file count, because review's whole premise is
- * that changes accumulate while you're looking elsewhere — a queue nothing
- * announces is a queue nobody opens. The count is total tracked files; it takes
- * the accent only while some of them are *unviewed*, so a queue you've already
- * read through stops asking for attention without pretending to be empty.
+ * One tab. `aria-current` rather than `aria-pressed`: these are locations, not
+ * toggles — the whole point of the redesign.
  */
-function ReviewToggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
-  const fileCount = useReviewStore((state) => state.files.length)
-  const hasUnviewed = useReviewStore((state) =>
-    state.files.some((file) => isUnviewed(file, state.viewedAt)),
-  )
-
+function SurfaceTab({
+  label,
+  selected,
+  title,
+  badge,
+  badgeAccent,
+  onClick,
+}: {
+  label: string
+  selected: boolean
+  title: string
+  badge?: string
+  badgeAccent?: boolean
+  onClick: () => void
+}) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={onToggle}
-      aria-label={
-        active
-          ? 'Back to panels'
-          : `Review mode${fileCount > 0 ? ` — ${fileCount} changed file${fileCount === 1 ? '' : 's'}` : ''}`
-      }
-      aria-pressed={active}
-      title="Review — ⌥R"
-      className={cn('relative', active && 'bg-accent-wash text-accent')}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={selected ? 'page' : undefined}
+      title={title}
+      className={cn(
+        'hand-sm-1 flex items-center gap-1.5 px-2.5 text-xs transition-colors',
+        selected ? 'bg-accent-wash text-text' : 'text-text-muted hover:bg-raised hover:text-text',
+      )}
     >
-      <GitPullRequestArrow size={15} />
-      {fileCount > 0 ? (
+      {label}
+      {badge ? (
         <span
           className={cn(
-            'absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center',
-            'rounded-full px-0.5 text-[9px] font-medium leading-none tabular-nums',
-            hasUnviewed ? 'bg-accent text-accent-contrast' : 'bg-raised text-text-faint',
+            'flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1',
+            'text-[9px] font-medium leading-none tabular-nums',
+            badgeAccent ? 'bg-accent text-accent-contrast' : 'bg-raised text-text-faint',
           )}
-          aria-hidden
+          aria-label={`${badge} changed files`}
         >
-          {fileCount > 99 ? '99+' : fileCount}
+          {badge}
         </span>
       ) : null}
-    </Button>
+    </button>
   )
+}
+
+function Divider() {
+  return <div className="mx-1.5 h-4 w-px bg-line" aria-hidden />
 }

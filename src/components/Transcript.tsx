@@ -4,6 +4,8 @@ import type { SessionStatus } from '@shared/ipc'
 import type { Lane, TranscriptItem } from '@/types/session'
 import { useStickyScroll } from '@/hooks/useStickyScroll'
 import { useIsStreaming } from '@/hooks/useStreamedText'
+import { useReviewStore } from '@/stores/reviewStore'
+import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { ActivityIndicator, formatElapsed, isBusyStatus } from './ActivityIndicator'
 import { ErrorRow } from './ErrorRow'
 import { Mark } from './Mark'
@@ -44,6 +46,7 @@ export function Transcript({
   lane,
   status,
   lastTurn,
+  tabId,
   showActivity,
   onOpenLane,
   onRetry,
@@ -52,6 +55,8 @@ export function Transcript({
   status: SessionStatus
   /** How the most recent turn ended; drives the settled footer. */
   lastTurn?: { ok: boolean; durationMs: number }
+  /** The owning session tab, for the footer's changed-files link. */
+  tabId: string
   /** Only the lane that owns the turn shows it — not every subagent tab at once. */
   showActivity: boolean
   onOpenLane: (id: string) => void
@@ -97,7 +102,7 @@ export function Transcript({
               <ActivityIndicator status={status} />
             </div>
           ) : settled ? (
-            <TurnFooter durationMs={lastTurn!.durationMs} />
+            <TurnFooter durationMs={lastTurn!.durationMs} tabId={tabId} />
           ) : null}
 
           {/* Room so the last line never sits against the composer. */}
@@ -224,20 +229,44 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
 }
 
 /**
- * The turn's resting state: the mark gone still, "done", and how long it took.
+ * The turn's resting state: the mark gone still, "done", how long it took —
+ * and, when this session's work left files behind, the way into reviewing them.
  *
  * Faint on purpose — this is a full stop, not an announcement. Its job is to be
  * the visible difference between "finished" and "hung": before it existed, both
  * looked like a transcript that had simply stopped moving. It occupies the same
  * slot the activity line did, so completion is a *transition* (accent motion →
  * faint stillness) rather than a layout snap.
+ *
+ * The review link is the natural entry point to the review surface: it appears
+ * exactly when an agent finishes having edited code, in the place you're
+ * already looking, naming this session's file count — not a global one.
  */
-function TurnFooter({ durationMs }: { durationMs: number }) {
+function TurnFooter({ durationMs, tabId }: { durationMs: number; tabId: string }) {
+  const changedCount = useReviewStore(
+    (state) => state.files.filter((file) => file.tabId === tabId).length,
+  )
+
   return (
     <div className="fade-in-soft mt-2 mb-1 flex items-center gap-2 text-xs text-text-faint">
       <Mark state="idle" size={15} className="text-accent/50" />
       <span>done</span>
       <span className="tabular-nums">· {formatElapsed(Math.max(1, Math.round(durationMs / 1000)))}</span>
+      {changedCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => {
+            const first = useReviewStore
+              .getState()
+              .files.find((file) => file.tabId === tabId)
+            if (first) useReviewStore.getState().setActivePath(first.path)
+            useWorkspaceStore.getState().setMode('review')
+          }}
+          className="hand-sm-1 -my-0.5 px-1.5 py-0.5 text-accent transition-colors hover:bg-accent-wash"
+        >
+          {changedCount} file{changedCount === 1 ? '' : 's'} changed — review
+        </button>
+      ) : null}
     </div>
   )
 }

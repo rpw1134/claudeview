@@ -68,8 +68,14 @@ type ReviewState = {
   dismiss: (paths: string[]) => Promise<void>
   dismissAll: () => Promise<void>
 
-  /** Send every unresolved comment to one session as a single message. */
-  sendComments: (tabId: string) => Promise<number>
+  /**
+   * Send the unresolved comments on `paths` to one session.
+   *
+   * Session-scoped rather than global: changes belong to the session that made
+   * them, so feedback goes back to that session — there is no "pick a target"
+   * step, because the target is a fact about the files, not a choice.
+   */
+  sendCommentsFor: (tabId: string, paths: string[]) => Promise<number>
 }
 
 function persist(comments: ReviewComment[]): ReviewComment[] {
@@ -257,9 +263,12 @@ export const useReviewStore = create<ReviewState>()((setState, getState) => ({
     await api['review:dismiss-all']()
   },
 
-  sendComments: async (tabId) => {
+  sendCommentsFor: async (tabId, paths) => {
     const { comments, files } = getState()
-    const pending = comments.filter((comment) => !comment.resolved)
+    const included = new Set(paths)
+    const pending = comments.filter(
+      (comment) => !comment.resolved && included.has(comment.path),
+    )
     if (pending.length === 0) return 0
 
     await useSessionStore.getState().send(tabId, composeReviewMessage(pending, files))

@@ -346,8 +346,8 @@ pgrep -fl "zsh|bash" | grep -v login
 | `⌥1`–`⌥8` | Focus panel by visual position |
 | `Alt+Tab` / `Ctrl+Tab` | Cycle panels (`Shift` reverses) |
 | `⌥W` / `⌘W` | Close focused panel |
-| `⌥K` | Toggle the Claude config view (agents, skills, hooks) |
-| `⌥R` | Toggle review mode |
+| `⌥K` | Config tab (agents, skills, hooks) |
+| `⌥R` | Review tab (when there are changes to review) |
 | `Enter` | Send (in a session composer) |
 | `Esc` | Interrupt the focused session's turn |
 | Paperclip / `⌥`-click | Attach files / folders |

@@ -89,8 +89,8 @@ npm run dev
 | `⌥1`–`⌥8`      | Focus panel by visual position (left-to-right, top-to-bottom) |
 | `⌥Tab` / `Ctrl+Tab` | Cycle panels (`⇧` reverses) |
 | `⌥W` / `⌘W` / `Ctrl+W` | Close the focused panel |
-| `⌥K`           | Toggle the Claude config view (agents, skills, hooks) |
-| `⌥R`           | Toggle review mode          |
+| `⌥K`           | Config tab (agents, skills, hooks) |
+| `⌥R`           | Review tab (when there are changes to review) |
 | `⌘,`           | Appearance settings        |
 
 ## How it fits together

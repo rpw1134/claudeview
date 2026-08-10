@@ -53,29 +53,42 @@ file snapshots it afresh, so "reviewed and accepted" means the next diff starts 
 what you accepted rather than replaying changes you already read. Nothing on disk is
 touched.
 
+### Where review lives
+
+Review is part of the sessions surface, not a sibling of it. The toolbar is a tab
+strip — **Sessions | Review** in one connected group, **Config** apart — and the
+Review tab only exists while there are changes to review; its appearing is the
+signal. The natural way in is the transcript itself: when a turn finishes having
+edited files, the turn's "done" footer grows a link — *"3 files changed — review"* —
+scoped to that session's files. When the set empties, the tab disappears and
+navigation returns to Sessions.
+
 ### Viewed and unviewed
 
 Each file remembers when you last opened it in review. A file whose latest change is
 newer than that shows a solid accent dot and a full-weight name in the rail — the
-inbox convention — and settles to faint once opened. The toolbar's review button
-carries the tracked-file count from every surface, accent-filled while anything is
-unviewed, so a queue growing behind a session panel is never silent. Viewing state
-persists across restarts.
+inbox convention — and settles to faint once opened. The Review tab carries the
+tracked-file count from every surface, accent-filled while anything is unviewed, so
+a queue growing behind a session panel is never silent. Viewing state persists
+across restarts.
 
 ## The comment workflow
 
-1. **Pick a file** in the rail. Files are grouped by workspace root (headed only when
-   there's more than one), nested by directory, and ordered most-recently-changed
-   first. The open file stays open when the set re-sorts.
+1. **Pick a file** in the rail. Files are grouped **by the session that changed
+   them** — a change belongs to a conversation — then nested by directory (per
+   workspace root, headed only when a session spans more than one). Changes with no
+   live session pool under "Other changes". The open file stays open when the set
+   re-sorts.
 2. **Select lines** by clicking a line number; shift-click extends, and dragging down
    the gutter selects a range.
 3. **Write the comment** in the row that appears under the selection. Enter submits,
    Shift+Enter makes a newline — the same contract as the session composer.
 4. **Resolve or delete** as you go. Resolved comments collapse to a struck-through
    line rather than vanishing: the record of what you already dealt with is the point.
-5. **Send** — one message, every unresolved comment, to the session you choose. The
-   default target is the session that last touched the open file, when that tab is
-   still open.
+5. **Reply** — each session group carries its own `Reply · N`, sending that group's
+   unresolved comments to that session as one message. There is no target picker:
+   the target is a fact about the files, shown in the group heading. The arrow beside
+   it jumps to the session's panel to watch the changes land.
 
 Comments are stored in `localStorage` under `claudeview.review.comments.v1` and are
 keyed by absolute path. They **survive dismissal of their file**, because the file

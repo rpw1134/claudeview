@@ -10,6 +10,8 @@ import { SettingsDialog } from '@/components/SettingsDialog'
 import { NewSessionPanel } from '@/components/NewSessionPanel'
 import { ConfigPanel } from '@/components/config/ConfigPanel'
 import { ReviewView } from '@/components/review/ReviewView'
+import { useReviewStore } from '@/stores/reviewStore'
+import type { Surface } from '@/components/WorkspaceBar'
 
 export function App() {
   // One IPC subscription for the whole app. See the hook for why it must be here.
@@ -20,28 +22,47 @@ export function App() {
   const focusedPanelId = useWorkspaceStore((state) => state.focusedPanelId)
   const autoFocusToken = useWorkspaceStore((state) => state.autoFocusToken)
   const mode = useWorkspaceStore((state) => state.mode)
-  const { focusPanel, cyclePanel, addPanel, closePanel, balanceLayout, toggleMode } =
+  const { focusPanel, cyclePanel, addPanel, closePanel, balanceLayout, setMode } =
     useWorkspaceStore.getState()
+  const reviewable = useReviewStore((state) => state.files.length > 0)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [home, setHome] = useState<string | undefined>()
 
   /**
-   * Which surface fills the window: the panel workspace, or Claude config.
+   * Which surface fills the window, as one value: sessions, review, or config.
    *
-   * Config is deliberately *not* a panel. It's a different activity — editing
-   * the machinery rather than talking to it — so it takes the whole window and
-   * leaves the mosaic untouched underneath. `configMounted` keeps the config
-   * tree alive after its first open (hidden, not unmounted), so switching away
-   * mid-edit and back doesn't lose a draft.
+   * These used to be two separate axes (a config "view" and a review "mode"),
+   * which meant three different mental models for one decision. The store still
+   * holds review as a workspace mode — the transcript link and the tree need
+   * it — but navigation reads and writes a single `surface`, tab-style.
+   * `configMounted` keeps the config tree alive after its first open (hidden,
+   * not unmounted), so switching away mid-edit and back doesn't lose a draft.
    */
   const [view, setView] = useState<'workspace' | 'config'>('workspace')
   const [configMounted, setConfigMounted] = useState(false)
 
-  const toggleConfig = () => {
-    setConfigMounted(true)
-    setView((current) => (current === 'config' ? 'workspace' : 'config'))
+  const surface: Surface = view === 'config' ? 'config' : mode === 'review' ? 'review' : 'sessions'
+
+  const goTo = (next: Surface) => {
+    if (next === 'config') {
+      setConfigMounted(true)
+      setView('config')
+      return
+    }
+    setView('workspace')
+    setMode(next === 'review' ? 'review' : 'panels')
   }
+
+  /**
+   * Review is only a place while there's something in it. When the set empties
+   * — a dismiss-all, or the last file dismissed — the surface underneath you
+   * ceases to exist, so navigation returns to sessions rather than stranding
+   * you on an empty screen whose tab has just disappeared.
+   */
+  useEffect(() => {
+    if (mode === 'review' && !reviewable) setMode('panels')
+  }, [mode, reviewable, setMode])
 
   useEffect(() => {
     api['app:info']()
@@ -69,21 +90,19 @@ export function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       const alt = event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey
 
-      // The config view toggle works from either surface — command or button,
-      // in both directions — and from either workspace mode.
+      // Surface shortcuts mirror the tabs: each one *goes to* its surface, and
+      // pressing it again returns to sessions — toggle semantics on top of tab
+      // navigation, reachable from anywhere.
       if (alt && event.code === 'KeyK') {
-        claim(event, toggleConfig)
+        claim(event, () => goTo(surface === 'config' ? 'sessions' : 'config'))
         return
       }
 
-      // Review is a workspace mode, not a view, but the command still needs to
-      // reach it from config: switch the view back to workspace on the way in,
-      // same as pressing the toolbar's config button would.
+      // ⌥R only means something while there are changes to review — the same
+      // condition under which the Review tab exists at all.
       if (alt && event.code === 'KeyR') {
-        claim(event, () => {
-          toggleMode()
-          if (view === 'config') setView('workspace')
-        })
+        if (surface !== 'review' && !reviewable) return
+        claim(event, () => goTo(surface === 'review' ? 'sessions' : 'review'))
         return
       }
 
@@ -151,11 +170,13 @@ export function App() {
     focusedPanelId,
     view,
     mode,
+    surface,
+    reviewable,
     addPanel,
     closePanel,
     focusPanel,
     cyclePanel,
-    toggleMode,
+    setMode,
   ])
 
   /*
@@ -189,17 +210,10 @@ export function App() {
     <div className="flex h-full flex-col bg-bg">
       <WorkspaceBar
         panelCount={panels.length}
-        configActive={view === 'config'}
-        reviewActive={mode === 'review'}
+        surface={surface}
+        onSurface={goTo}
         onAddSession={(direction) => void addPanel('session', { direction })}
         onAddTerminal={(direction) => void addPanel('terminal', { direction })}
-        onToggleConfig={toggleConfig}
-        onToggleReview={() => {
-          // Mirror the ⌥R shortcut exactly: entering review from config also
-          // brings the workspace back, or the toggle would flip an invisible mode.
-          toggleMode()
-          if (view === 'config') setView('workspace')
-        }}
         onBalance={balanceLayout}
         onOpenSettings={() => setSettingsOpen(true)}
       />
@@ -219,7 +233,7 @@ export function App() {
             home={home}
             onStart={(options) => void addPanel('session', options)}
             onStartTerminal={(cwd) => void addPanel('terminal', { cwd })}
-            onOpenConfig={toggleConfig}
+            onOpenConfig={() => goTo('config')}
           />
         ) : (
           <PanelMosaic

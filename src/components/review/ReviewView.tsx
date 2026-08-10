@@ -37,8 +37,6 @@ export function ReviewView() {
 
   const tabs = useSessionStore((state) => state.tabs)
   const [home, setHome] = useState<string | undefined>()
-  /** Null until the user picks one; the default is derived, not stored. */
-  const [chosenTabId, setChosenTabId] = useState<string | null>(null)
 
   useEffect(() => {
     api['app:info']()
@@ -47,6 +45,35 @@ export function ReviewView() {
   }, [])
 
   const activeFile = files.find((file) => file.path === activePath) ?? null
+
+  /*
+   * Files grouped by the session that wrote them — the organizing idea of the
+   * whole surface. Changes are unique to a session, and so is the reply: each
+   * group carries its own "Reply" wired to its own session. Files without an
+   * open session (git-detected, or the session was closed) pool under "Other
+   * changes", still readable and commentable, just with nowhere live to send.
+   * Open-session groups lead, ordered by their most recent change.
+   */
+  const groups = useMemo(() => {
+    const byTab = new Map<string, typeof files>()
+    for (const file of files) {
+      const key = file.tabId && tabs.some((tab) => tab.id === file.tabId) ? file.tabId : ''
+      const bucket = byTab.get(key)
+      if (bucket) bucket.push(file)
+      else byTab.set(key, [file])
+    }
+    const entries = [...byTab.entries()].map(([tabId, groupFiles]) => ({
+      tabId: tabId || null,
+      title: tabId ? (tabs.find((tab) => tab.id === tabId)?.title ?? 'Session') : 'Other changes',
+      files: groupFiles,
+      latest: Math.max(...groupFiles.map((file) => file.lastChangedAt)),
+    }))
+    entries.sort((a, b) => {
+      if ((a.tabId === null) !== (b.tabId === null)) return a.tabId === null ? 1 : -1
+      return b.latest - a.latest
+    })
+    return entries
+  }, [files, tabs])
 
   const unresolvedByPath = useMemo(() => {
     const counts = new Map<string, number>()
@@ -67,32 +94,7 @@ export function ReviewView() {
     [comments, activePath],
   )
 
-  const sessions = tabs.map((tab) => ({ id: tab.id, title: tab.title }))
-  /*
-   * Derived rather than stored, so it can't go stale: a chosen tab that has since
-   * been closed falls back to the file's owner, then to the first open session.
-   * Storing the resolved value would leave the send button aimed at a dead tab.
-   */
-  const targetTabId =
-    (chosenTabId && sessions.some((session) => session.id === chosenTabId) ? chosenTabId : null) ??
-    (activeFile?.tabId && sessions.some((session) => session.id === activeFile.tabId)
-      ? activeFile.tabId
-      : null) ??
-    sessions[0]?.id ??
-    null
-
-  const header = (
-    <ReviewHeader
-      fileCount={files.length}
-      unresolvedCount={unresolvedCount}
-      sessions={sessions}
-      targetTabId={targetTabId}
-      onTargetChange={setChosenTabId}
-      onSend={async () => {
-        if (targetTabId) await useReviewStore.getState().sendComments(targetTabId)
-      }}
-    />
-  )
+  const header = <ReviewHeader fileCount={files.length} unresolvedCount={unresolvedCount} />
 
   if (files.length === 0) {
     return (
@@ -122,7 +124,7 @@ export function ReviewView() {
       {header}
       <div className="flex min-h-0 flex-1">
         <ReviewFileTree
-          files={files}
+          groups={groups}
           activePath={activePath}
           home={home}
           unresolvedFor={(path) => unresolvedByPath.get(path) ?? 0}

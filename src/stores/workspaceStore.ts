@@ -70,6 +70,7 @@ type WorkspaceState = {
   /** Move focus to the next/previous panel in visual order. */
   cyclePanel: (delta: 1 | -1) => void
   toggleMode: () => void
+  setMode: (mode: 'panels' | 'review') => void
   addPanel: (
     kind: PanelKind,
     options?: { cwd?: string; resume?: string; title?: string; direction?: SplitDirection },
@@ -96,6 +97,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
 
   toggleMode: () =>
     setState((state) => ({ mode: state.mode === 'panels' ? 'review' : 'panels' })),
+
+  setMode: (mode) => setState({ mode }),
 
   focusPanel: (panelId, viaKeyboard = false) =>
     setState((state) => ({
