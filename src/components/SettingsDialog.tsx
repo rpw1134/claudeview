@@ -1,9 +1,17 @@
 import { Check } from 'lucide-react'
 import { Dialog, DialogContent } from './ui/Dialog'
-import { Field, Select, Slider } from './ui/Field'
+import { Field, Segmented, Select, Slider } from './ui/Field'
 import { Button } from './ui/Button'
 import { useAppearanceStore } from '@/stores/appearanceStore'
-import { COLORWAYS, FONT_STACKS, MEASURE_FULL, type FontId } from '@/lib/theme'
+import {
+  buildCustomColorway,
+  COLORWAYS,
+  CUSTOM_RECIPE_BOUNDS,
+  FONT_STACKS,
+  MEASURE_FULL,
+  type CustomRecipe,
+  type FontId,
+} from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 /**
@@ -34,39 +42,38 @@ export function SettingsDialog({
         <div className="flex flex-col gap-6">
           <Field label="Colorway">
             <div className="grid grid-cols-2 gap-2">
-              {COLORWAYS.map((colorway) => {
-                const isActive = appearance.colorway === colorway.id
-                return (
-                  <button
-                    key={colorway.id}
-                    onClick={() => appearance.set('colorway', colorway.id)}
-                    aria-pressed={isActive}
-                    className={cn(
-                      'flex h-12 items-center gap-3 rounded-lg px-3 text-left transition-colors duration-150',
-                      isActive ? 'bg-accent-wash' : 'hover:bg-raised',
-                    )}
-                  >
-                    {/* Inner radius = outer(12) - padding(12)... clamped to sm so the
-                        swatch still reads as a rounded chip rather than a square. */}
-                    <span className="flex shrink-0 overflow-hidden rounded-sm">
-                      {colorway.swatch.map((color, index) => (
-                        <span
-                          key={index}
-                          className="h-6 w-3"
-                          style={{ background: color }}
-                          aria-hidden
-                        />
-                      ))}
-                    </span>
-                    <span className="flex-1 truncate text-xs font-medium text-text">
-                      {colorway.label}
-                    </span>
-                    {isActive ? <Check size={14} className="shrink-0 text-accent" /> : null}
-                  </button>
-                )
-              })}
+              {COLORWAYS.map((colorway) => (
+                <ColorwaySwatchButton
+                  key={colorway.id}
+                  label={colorway.label}
+                  swatch={colorway.swatch}
+                  isActive={appearance.colorway === colorway.id}
+                  onClick={() => appearance.set('colorway', colorway.id)}
+                />
+              ))}
+              {/* Live-rendered from the current recipe once one exists, so the
+                  tile itself previews what selecting it will apply — same as
+                  every built-in swatch. Before that (first visit) it falls
+                  back to a neutral placeholder rather than guessing a recipe. */}
+              <ColorwaySwatchButton
+                label="Custom"
+                swatch={
+                  appearance.custom
+                    ? buildCustomColorway(appearance.custom).swatch
+                    : (['var(--raised)', 'var(--overlay)', 'var(--text-faint)'] as const)
+                }
+                isActive={appearance.colorway === 'custom'}
+                onClick={() => appearance.set('colorway', 'custom')}
+              />
             </div>
           </Field>
+
+          {appearance.colorway === 'custom' && appearance.custom ? (
+            <CustomThemeEditor
+              recipe={appearance.custom}
+              onChange={(next) => appearance.set('custom', next)}
+            />
+          ) : null}
 
           <Field label="Typeface" htmlFor="font-select">
             <Select
@@ -131,5 +138,142 @@ export function SettingsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** One colorway tile: swatch, label, active state. Shared by built-ins and Custom. */
+function ColorwaySwatchButton({
+  label,
+  swatch,
+  isActive,
+  onClick,
+}: {
+  label: string
+  swatch: readonly [string, string, string]
+  isActive: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={isActive}
+      className={cn(
+        'flex h-12 items-center gap-3 rounded-lg px-3 text-left transition-colors duration-150',
+        isActive ? 'bg-accent-wash' : 'hover:bg-raised',
+      )}
+    >
+      {/* Inner radius = outer(12) - padding(12)... clamped to sm so the
+          swatch still reads as a rounded chip rather than a square. */}
+      <span className="flex shrink-0 overflow-hidden rounded-sm">
+        {swatch.map((color, index) => (
+          <span key={index} className="h-6 w-3" style={{ background: color }} aria-hidden />
+        ))}
+      </span>
+      <span className="flex-1 truncate text-xs font-medium text-text">{label}</span>
+      {isActive ? <Check size={14} className="shrink-0 text-accent" /> : null}
+    </button>
+  )
+}
+
+/**
+ * The custom-recipe editor: every slider maps straight onto a `CustomRecipe`
+ * field and calls `onChange` with the whole recipe, which the caller pushes
+ * through `set('custom', ...)` — same live-apply-on-set pattern as every
+ * other appearance control.
+ *
+ * Accent lightness bounds move with `scheme` (see `CUSTOM_RECIPE_BOUNDS` for
+ * why), so switching light/dark reclamps the current value into the new
+ * range instead of leaving it invalid or silently out of bounds.
+ */
+function CustomThemeEditor({
+  recipe,
+  onChange,
+}: {
+  recipe: CustomRecipe
+  onChange: (recipe: CustomRecipe) => void
+}) {
+  const lBounds = CUSTOM_RECIPE_BOUNDS.accent.l[recipe.scheme]
+
+  const setScheme = (scheme: 'light' | 'dark') => {
+    const bounds = CUSTOM_RECIPE_BOUNDS.accent.l[scheme]
+    onChange({
+      ...recipe,
+      scheme,
+      accent: { ...recipe.accent, l: Math.min(bounds.max, Math.max(bounds.min, recipe.accent.l)) },
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg bg-raised p-3">
+      <Field label="Scheme">
+        <Segmented
+          aria-label="Custom theme scheme"
+          value={recipe.scheme}
+          onChange={setScheme}
+          options={[
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+        />
+      </Field>
+
+      <Field label={`Neutral hue — ${Math.round(recipe.neutralHue)}°`}>
+        <Slider
+          ariaLabel="Neutral hue"
+          value={recipe.neutralHue}
+          min={CUSTOM_RECIPE_BOUNDS.neutralHue.min}
+          max={CUSTOM_RECIPE_BOUNDS.neutralHue.max}
+          step={1}
+          onChange={(neutralHue) => onChange({ ...recipe, neutralHue })}
+        />
+      </Field>
+
+      <Field label={`Neutral chroma — ${recipe.neutralChroma.toFixed(3)}`}>
+        <Slider
+          ariaLabel="Neutral chroma"
+          value={recipe.neutralChroma}
+          min={CUSTOM_RECIPE_BOUNDS.neutralChroma.min}
+          max={CUSTOM_RECIPE_BOUNDS.neutralChroma.max}
+          step={0.001}
+          onChange={(neutralChroma) => onChange({ ...recipe, neutralChroma })}
+        />
+      </Field>
+
+      <Field label={`Accent hue — ${Math.round(recipe.accent.h)}°`}>
+        <Slider
+          ariaLabel="Accent hue"
+          value={recipe.accent.h}
+          min={CUSTOM_RECIPE_BOUNDS.accent.h.min}
+          max={CUSTOM_RECIPE_BOUNDS.accent.h.max}
+          step={1}
+          onChange={(h) => onChange({ ...recipe, accent: { ...recipe.accent, h } })}
+        />
+      </Field>
+
+      <Field label={`Accent chroma — ${recipe.accent.c.toFixed(3)}`}>
+        <Slider
+          ariaLabel="Accent chroma"
+          value={recipe.accent.c}
+          min={CUSTOM_RECIPE_BOUNDS.accent.c.min}
+          max={CUSTOM_RECIPE_BOUNDS.accent.c.max}
+          step={0.001}
+          onChange={(c) => onChange({ ...recipe, accent: { ...recipe.accent, c } })}
+        />
+      </Field>
+
+      <Field
+        label={`Accent lightness — ${recipe.accent.l.toFixed(2)}`}
+        hint="Bounded to stay legible against this scheme's surfaces."
+      >
+        <Slider
+          ariaLabel="Accent lightness"
+          value={recipe.accent.l}
+          min={lBounds.min}
+          max={lBounds.max}
+          step={0.01}
+          onChange={(l) => onChange({ ...recipe, accent: { ...recipe.accent, l } })}
+        />
+      </Field>
+    </div>
   )
 }

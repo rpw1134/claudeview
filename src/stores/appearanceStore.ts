@@ -7,7 +7,21 @@ import {
   resolveColorway,
   resolveFont,
   type Appearance,
+  type CustomRecipe,
 } from '@/lib/theme'
+
+/**
+ * The recipe a first-time "Custom" selection starts from — a warm dark theme
+ * in the spirit of Hearth, so the editor opens on something that already
+ * looks intentional rather than a default grey the user has to fix before it
+ * looks like anything.
+ */
+const DEFAULT_CUSTOM_RECIPE: CustomRecipe = {
+  scheme: 'dark',
+  neutralHue: 55,
+  neutralChroma: 0.012,
+  accent: { l: 0.74, c: 0.115, h: 62 },
+}
 
 type AppearanceState = Appearance & {
   set: <K extends keyof Appearance>(key: K, value: Appearance[K]) => void
@@ -27,7 +41,15 @@ export const useAppearanceStore = create<AppearanceState>()(
       ...DEFAULT_APPEARANCE,
 
       set: (key, value) => {
-        setState({ [key]: value } as Pick<Appearance, typeof key>)
+        // First switch to Custom: seed a recipe so the editor (and the app)
+        // has something to render instead of falling back to the default
+        // colorway silently. Later switches keep whatever the user authored.
+        const seedCustom =
+          key === 'colorway' && value === 'custom' && getState().custom === undefined
+        setState({
+          [key]: value,
+          ...(seedCustom ? { custom: DEFAULT_CUSTOM_RECIPE } : {}),
+        } as Partial<Appearance>)
         applyAppearance(getState())
       },
 
@@ -38,7 +60,7 @@ export const useAppearanceStore = create<AppearanceState>()(
     }),
     {
       name: 'claudeview.appearance',
-      version: 3,
+      version: 4,
       /**
        * Move anyone still on the *old defaults* onto the new ones, per version.
        *
@@ -64,10 +86,18 @@ export const useAppearanceStore = create<AppearanceState>()(
         // v2 -> v3: responses fill the panel instead of capping at 84ch.
         if (from < 3 && state.measure === 84) state.measure = MEASURE_FULL
 
+        // v3 -> v4: added `custom` (user-authored recipes) and widened
+        // `colorway` to allow `'custom'`. No existing value needs
+        // translating — every prior `colorway` is still a valid id, and a
+        // missing `custom` is already handled by `resolveAppliedColorway`'s
+        // fallback — so this bump exists only to make persisted shape and
+        // code shape agree.
+
         return state
       },
       partialize: (state) => ({
         colorway: state.colorway,
+        custom: state.custom,
         font: state.font,
         fontSize: state.fontSize,
         lineHeight: state.lineHeight,
@@ -78,13 +108,19 @@ export const useAppearanceStore = create<AppearanceState>()(
        * (`graphite` -> `slate`, `terminal` -> `moss`, `inter-ish` -> `grotesque`).
        * A stored id from an older build would otherwise fall through to an
        * unstyled theme, so normalize on rehydrate and write the result back.
+       *
+       * `'custom'` is left untouched — `resolveColorway` only knows built-in
+       * ids and would otherwise silently demote a custom selection back to
+       * the default colorway on every launch.
        */
       onRehydrateStorage: () => (state) => {
         if (!state) {
           applyAppearance(DEFAULT_APPEARANCE)
           return
         }
-        state.colorway = resolveColorway(state.colorway).id
+        if (state.colorway !== 'custom') {
+          state.colorway = resolveColorway(state.colorway).id
+        }
         state.font = resolveFont(state.font)
         applyAppearance(state)
       },

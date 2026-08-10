@@ -91,9 +91,12 @@ const PAPER_RAMP = {
   faint: 0.494,
 } as const
 
-type Recipe = {
-  id: ColorwayId
-  label: string
+/**
+ * The inputs `buildVars` actually needs. `Recipe` (built-ins) and `CustomRecipe`
+ * (user-authored) both satisfy this — it's the seam that lets a hand-picked
+ * palette and a slider-built one run through the identical pipeline.
+ */
+type VarsInput = {
   scheme: 'dark' | 'light'
   /** Which lightness ramp to build from. Defaults by scheme. */
   ramp?: 'dark' | 'light' | 'paper'
@@ -104,6 +107,57 @@ type Recipe = {
   accent: { l: number; c: number; h: number }
   semantic?: Partial<{ success: number; danger: number; warning: number }>
 }
+
+type Recipe = VarsInput & {
+  id: ColorwayId
+  label: string
+}
+
+/**
+ * A user-authored recipe, run through the same `buildVars` pipeline as the
+ * built-in colorways. No `ramp` field — custom themes always use the standard
+ * light/dark ramp, never `paper`, which is tuned to that colorway's specific
+ * hue (see `PAPER_RAMP`'s doc comment) and would look off against an arbitrary
+ * accent.
+ */
+export type CustomRecipe = {
+  scheme: 'light' | 'dark'
+  neutralHue: number
+  neutralChroma: number
+  accent: { l: number; c: number; h: number }
+}
+
+/**
+ * Slider bounds for the custom-theme editor.
+ *
+ * Neutral hue/chroma are unconstrained-ish: any hue is a valid grey tint, and
+ * chroma is capped at 0.03 because past that a "neutral" surface reads as
+ * a tinted color, not a grey with a trace of warmth (the built-in recipes top
+ * out at 0.016).
+ *
+ * Accent chroma is bounded away from 0 (a fully desaturated accent stops
+ * reading as an accent at all) and capped at 0.16, matching the most
+ * saturated built-in accents. Accent lightness is bounded *per scheme*
+ * because it's load-bearing for contrast: `--accent` sits directly on `--bg`
+ * and `--surface` (buttons, links, focus rings), and those surfaces sit at
+ * opposite ends of the lightness axis in light vs. dark. A dark-scheme accent
+ * lighter than ~0.6 or a light-scheme accent lighter than ~0.6 both fail to
+ * clear their surface by enough to stay legible — the bounds are the window
+ * where the accent reads clearly on its own scheme's surfaces without the
+ * user needing to know why.
+ */
+export const CUSTOM_RECIPE_BOUNDS = {
+  neutralHue: { min: 0, max: 360 },
+  neutralChroma: { min: 0, max: 0.03 },
+  accent: {
+    h: { min: 0, max: 360 },
+    c: { min: 0.04, max: 0.16 },
+    l: {
+      dark: { min: 0.6, max: 0.85 },
+      light: { min: 0.45, max: 0.6 },
+    },
+  },
+} as const
 
 const RECIPES: readonly Recipe[] = [
   /*
@@ -183,7 +237,7 @@ const oklch = (l: number, c: number, h: number): string =>
 
 const RAMPS = { dark: DARK_RAMP, light: LIGHT_RAMP, paper: PAPER_RAMP } as const
 
-function buildVars(recipe: Recipe): Record<string, string> {
+function buildVars(recipe: VarsInput): Record<string, string> {
   const ramp = RAMPS[recipe.ramp ?? (recipe.scheme === 'dark' ? 'dark' : 'light')]
   const h = recipe.neutralHue
   const c = recipe.neutralChroma
@@ -239,7 +293,7 @@ function buildVars(recipe: Recipe): Record<string, string> {
 }
 
 export type Colorway = {
-  id: ColorwayId
+  id: ColorwayId | 'custom'
   label: string
   scheme: 'dark' | 'light'
   /** Swatch for the picker: [background, raised surface, accent]. */
@@ -257,6 +311,23 @@ export const COLORWAYS: readonly Colorway[] = RECIPES.map((recipe) => {
     vars,
   }
 })
+
+/**
+ * Run a user-authored recipe through the same pipeline as the built-ins. This
+ * is the whole feature: a custom theme isn't a special case, it's just a
+ * `Recipe` that came from sliders instead of a hand-picked constant, so it
+ * gets the same generated ramp and the same contrast guarantees.
+ */
+export function buildCustomColorway(recipe: CustomRecipe): Colorway {
+  const vars = buildVars(recipe)
+  return {
+    id: 'custom',
+    label: 'Custom',
+    scheme: recipe.scheme,
+    swatch: [vars['--bg']!, vars['--raised']!, vars['--accent']!],
+    vars,
+  }
+}
 
 /**
  * The written face, for display text only.
@@ -301,7 +372,13 @@ export const FONT_STACKS: Record<FontId, { label: string; body: string; mono: st
 }
 
 export type Appearance = {
-  colorway: ColorwayId
+  colorway: ColorwayId | 'custom'
+  /**
+   * The user-authored recipe for `colorway: 'custom'`. Kept even when a
+   * built-in colorway is active, so switching to "Custom" and back doesn't
+   * lose the editor state.
+   */
+  custom?: CustomRecipe
   font: FontId
   /** Base font size in px. Everything else is relative, so this scales the UI. */
   fontSize: number
@@ -342,6 +419,24 @@ export function resolveColorway(id: string): Colorway {
   return COLORWAYS.find((entry) => entry.id === mapped) ?? COLORWAYS[0]!
 }
 
+/**
+ * Resolve the colorway an `Appearance` actually renders with, including
+ * `'custom'`. Kept separate from `resolveColorway` (whose signature/behavior
+ * built-in callers like the colorway picker rely on) rather than teaching it
+ * about `'custom'` — that would mean every caller passing a bare id has to
+ * pass a recipe too, for a case only `applyAppearance` needs to handle.
+ *
+ * Falls back to the default colorway if `'custom'` is selected but no recipe
+ * has been authored yet (e.g. a fresh install with `colorway: 'custom'`
+ * persisted from a race, or a future migration).
+ */
+export function resolveAppliedColorway(appearance: Pick<Appearance, 'colorway' | 'custom'>): Colorway {
+  if (appearance.colorway === 'custom') {
+    return appearance.custom ? buildCustomColorway(appearance.custom) : resolveColorway(DEFAULT_APPEARANCE.colorway)
+  }
+  return resolveColorway(appearance.colorway)
+}
+
 export function resolveFont(id: string): FontId {
   const mapped = LEGACY_FONTS[id] ?? id
   return mapped in FONT_STACKS ? (mapped as FontId) : 'system'
@@ -356,7 +451,7 @@ export function resolveFont(id: string): FontId {
  */
 export function applyAppearance(appearance: Appearance): void {
   const root = document.documentElement
-  const colorway = resolveColorway(appearance.colorway)
+  const colorway = resolveAppliedColorway(appearance)
 
   for (const [name, value] of Object.entries(colorway.vars)) {
     root.style.setProperty(name, value)
