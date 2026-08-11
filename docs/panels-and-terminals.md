@@ -351,6 +351,7 @@ pgrep -fl "zsh|bash" | grep -v login
 | `Enter` | Send (in a session composer) |
 | `Esc` | Interrupt the focused session's turn |
 | Paperclip / `⌥`-click | Attach files / folders |
+| `⌘+` / `⌘-` / `⌘0` | Zoom the focused panel in / out / reset (per panel, not the window) |
 | `⌘,` | Appearance |
 
 Rearranging is drag-only for now — there are no keyboard commands for moving a panel

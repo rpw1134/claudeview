@@ -11,6 +11,7 @@ import {
   type SplitNode,
 } from '@/lib/layoutTree'
 import { PanelFrame } from './PanelFrame'
+import { useZoomStore } from '@/stores/zoomStore'
 import { cn } from '@/lib/utils'
 
 /** Live drag state, kept outside React so pointer moves don't re-render the tree. */
@@ -193,15 +194,17 @@ function LayoutBranch({
           drag?.panelId === panel.id && 'opacity-40',
         )}
       >
-        <PanelFrame
-          panel={panel}
-          focused={panel.id === focusedPanelId}
-          autoFocusToken={autoFocusToken}
-          home={home}
-          onFocus={() => onFocus(panel.id)}
-          onClose={() => onClose(panel.id)}
-          onHeaderPointerDown={(event) => onStartDrag(panel.id, event)}
-        />
+        <ZoomedPanel panelId={panel.id}>
+          <PanelFrame
+            panel={panel}
+            focused={panel.id === focusedPanelId}
+            autoFocusToken={autoFocusToken}
+            home={home}
+            onFocus={() => onFocus(panel.id)}
+            onClose={() => onClose(panel.id)}
+            onHeaderPointerDown={(event) => onStartDrag(panel.id, event)}
+          />
+        </ZoomedPanel>
 
         {isDropTarget ? (
           <div
@@ -244,6 +247,27 @@ function LayoutBranch({
       onResize={onResize}
     />
   </Split>
+}
+
+/**
+ * Applies the panel's ⌘+/⌘- zoom factor.
+ *
+ * CSS `zoom` rather than a font-size override or a transform: it participates
+ * in layout (a transform would let zoomed content overflow its clipped panel)
+ * and it scales *everything* — SVG diagrams, gutters, line numbers — which is
+ * what "make this panel bigger" means. Its own component, subscribed per panel
+ * id, so twisting one panel's zoom re-renders that panel and nothing else.
+ */
+function ZoomedPanel({ panelId, children }: { panelId: string; children: React.ReactNode }) {
+  const factor = useZoomStore((state) => state.zoom[panelId] ?? 1)
+  return (
+    <div
+      className="h-full w-full"
+      style={factor === 1 ? undefined : ({ zoom: factor } as React.CSSProperties)}
+    >
+      {children}
+    </div>
+  )
 }
 
 /**

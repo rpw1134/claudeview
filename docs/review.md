@@ -63,6 +63,24 @@ edited files, the turn's "done" footer grows a link — *"3 files changed — re
 scoped to that session's files. When the set empties, the tab disappears and
 navigation returns to Sessions.
 
+### Session close reaps its files
+
+Closing a session dismisses its tracked files — a queue for a conversation that
+no longer exists isn't "later", it's clutter, and the Review tab lingering over
+it read as a bug. The exception is the standing rule that authored state never
+silently vanishes: a file carrying an **unresolved comment** stays until you
+resolve or dismiss it yourself.
+
+### Markdown view modes
+
+Markdown files get a **Source | Preview | Split** toggle in the pane header.
+Preview renders the document (code highlighted, diagrams drawn) as blocks that
+each know their source line range, so commenting works in every mode — the `+`
+on a rendered paragraph files a comment on its real lines, visible from Source
+at those lines and sent to the agent as those lines. Split shows both columns
+with proportional scroll sync; clicking a comment marker reveals its exact
+region in the other column.
+
 ### Viewed and unviewed
 
 Each file remembers when you last opened it in review. A file whose latest change is

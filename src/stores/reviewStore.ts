@@ -183,6 +183,41 @@ export function composeReviewMessage(comments: ReviewComment[], files: ReviewFil
   )
 }
 
+/**
+ * Reap a closed session's review files.
+ *
+ * A session that closes takes its uncommented files out of the review set —
+ * "review it later" stops meaning anything once the conversation that made the
+ * changes is gone, and the Review tab lingering over a dead queue read as a
+ * bug. The exception is deliberate and matches the standing rule that authored
+ * state never silently vanishes: a file carrying an UNRESOLVED comment stays,
+ * because the note on it is yours, not the session's.
+ *
+ * Module-level watcher rather than logic inside closeTab: the session store
+ * shouldn't know review exists, and this fires on every path a tab dies by —
+ * explicit close, panel close, restore-pruning.
+ */
+let watchedTabIds: Set<string> | null = null
+useSessionStore.subscribe((state) => {
+  const current = new Set(state.tabs.map((tab) => tab.id))
+  const previous = watchedTabIds
+  watchedTabIds = current
+  if (!previous) return
+
+  const removed = [...previous].filter((tabId) => !current.has(tabId))
+  if (removed.length === 0) return
+
+  const gone = new Set(removed)
+  const { files, comments } = useReviewStore.getState()
+  const keepPaths = new Set(
+    comments.filter((comment) => !comment.resolved).map((comment) => comment.path),
+  )
+  const reap = files
+    .filter((file) => file.tabId && gone.has(file.tabId) && !keepPaths.has(file.path))
+    .map((file) => file.path)
+  if (reap.length > 0) void useReviewStore.getState().dismiss(reap)
+})
+
 export const useReviewStore = create<ReviewState>()((setState, getState) => ({
   files: [],
   activePath: null,

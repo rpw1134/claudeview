@@ -93,6 +93,7 @@ npm run dev
 | `⌥W` / `⌘W` / `Ctrl+W` | Close the focused panel |
 | `⌥K`           | Config tab (agents, skills, hooks) |
 | `⌥R`           | Review tab (when there are changes to review) |
+| `⌘+` / `⌘-` / `⌘0` | Zoom the focused panel in / out / reset |
 | `⌘,`           | Appearance settings        |
 
 ## How it fits together

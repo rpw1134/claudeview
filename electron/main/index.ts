@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -162,6 +162,35 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'darwin' && fs.existsSync(ICON_PATH)) {
       app.dock?.setIcon(ICON_PATH)
     }
+
+    /*
+     * The default menu, minus the zoom accelerators.
+     *
+     * Electron's built-in View menu binds ⌘+/⌘-/⌘0 to whole-window zoom, and
+     * menu accelerators fire before the renderer ever sees a keydown — so the
+     * app's per-panel zoom (App.tsx) was unreachable behind them. Everything
+     * else is kept via roles: losing the Edit roles would silently break
+     * ⌘C/⌘V/⌘A on macOS, which routes clipboard through the menu.
+     */
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+        { role: 'fileMenu' },
+        { role: 'editMenu' },
+        {
+          label: 'View',
+          submenu: [
+            ...(DEV_SERVER_URL
+              ? [{ role: 'reload' as const }, { role: 'forceReload' as const }]
+              : []),
+            { role: 'toggleDevTools' },
+            { type: 'separator' },
+            { role: 'togglefullscreen' },
+          ],
+        },
+        { role: 'windowMenu' },
+      ]),
+    )
 
     registerIpc(sessions, terminals, review, () => window)
     review.start()

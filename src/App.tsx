@@ -12,6 +12,7 @@ import { ConfigPanel } from '@/components/config/ConfigPanel'
 import { ReviewView } from '@/components/review/ReviewView'
 import { OnboardingFlow } from '@/components/onboarding'
 import { useReviewStore } from '@/stores/reviewStore'
+import { useZoomStore } from '@/stores/zoomStore'
 import type { Surface } from '@/components/WorkspaceBar'
 
 export function App() {
@@ -71,6 +72,16 @@ export function App() {
       .catch(() => undefined)
   }, [])
 
+  // A closed panel's zoom entry has nothing to apply to; drop it here rather
+  // than in the workspace store, which shouldn't know zoom exists.
+  useEffect(() => {
+    const live = new Set(panels.map((panel) => panel.id))
+    const { zoom, forget } = useZoomStore.getState()
+    for (const panelId of Object.keys(zoom)) {
+      if (!live.has(panelId)) forget(panelId)
+    }
+  }, [panels])
+
   useEffect(() => {
     /*
      * A claimed shortcut must produce its action and NOTHING else.
@@ -111,6 +122,28 @@ export function App() {
       if (accel && event.key === ',') {
         claim(event, () => setSettingsOpen(true))
         return
+      }
+
+      /*
+       * ⌘+ / ⌘- / ⌘0 zoom the FOCUSED PANEL, not the window. Eight panels are
+       * eight documents at different reading distances; window zoom helps none
+       * of them. Requires main to ship a menu without the default zoom roles,
+       * or these keys never reach the renderer (see electron/main/index.ts).
+       * `=` is what an unshifted ⌘+ actually reports on most layouts.
+       */
+      if (accel && view === 'workspace' && mode === 'panels' && focusedPanelId) {
+        if (event.key === '=' || event.key === '+') {
+          claim(event, () => useZoomStore.getState().zoomIn(focusedPanelId))
+          return
+        }
+        if (event.key === '-') {
+          claim(event, () => useZoomStore.getState().zoomOut(focusedPanelId))
+          return
+        }
+        if (event.key === '0') {
+          claim(event, () => useZoomStore.getState().resetZoom(focusedPanelId))
+          return
+        }
       }
 
       // Everything below acts on panels. While config fills the window, or
