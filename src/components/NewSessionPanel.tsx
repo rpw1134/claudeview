@@ -114,19 +114,24 @@ export function NewSessionPanel({
         </p>
 
         {/*
-          The directory comes first because it scopes everything under it — the new
-          session, the terminal, and the resume list. One button rather than a
-          read-only field plus a "Choose": the value and the way to change it are the
-          same target, which is fewer elements and a much larger hit area.
+          The directory and the two start actions live inside ONE bounded group,
+          because the directory applies to exactly these and nothing else. It used
+          to float above both this cluster and the resume list, and read as a page-
+          wide setting — people reasonably assumed it re-scoped their resumes,
+          which resume never does (a resumed session continues in the directory it
+          was born in; each row states its own below). The border earns its place
+          here: it draws the scope boundary that spacing alone failed to draw.
         */}
-        <div className="mt-8 flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 basis-80">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">Working directory</h2>
+        <div className="hand-1 mt-8 border border-line bg-surface/40 p-4">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">
+            Start new — in this directory
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
               onClick={pickDirectory}
               data-tour="directory"
-              className="hand-1 group mt-1.5 flex h-12 w-full items-center gap-3 bg-surface px-3.5
-                         text-left transition-colors hover:bg-raised"
+              className="hand-1 group flex h-12 min-w-0 flex-1 basis-80 items-center gap-3
+                         bg-surface px-3.5 text-left transition-colors hover:bg-raised"
             >
               <FolderOpen size={17} className="shrink-0 text-ink-faint" aria-hidden />
               <span
@@ -142,30 +147,30 @@ export function NewSessionPanel({
                 change
               </span>
             </button>
-          </div>
 
-          <div className="flex gap-2">
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => onStart({ cwd })}
-              data-tour="new-session"
-              className="h-12 px-5"
-            >
-              <Mark state="idle" size={17} />
-              New session
-            </Button>
-            {/* Secondary, not primary: a terminal is the supporting act here. */}
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => onStartTerminal(cwd)}
-              data-tour="new-terminal"
-              className="h-12"
-            >
-              <SquareTerminal size={16} />
-              Terminal
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => onStart({ cwd })}
+                data-tour="new-session"
+                className="h-12 px-5"
+              >
+                <Mark state="idle" size={17} />
+                New session
+              </Button>
+              {/* Secondary, not primary: a terminal is the supporting act here. */}
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => onStartTerminal(cwd)}
+                data-tour="new-terminal"
+                className="h-12"
+              >
+                <SquareTerminal size={16} />
+                Terminal
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -255,9 +260,12 @@ export function NewSessionPanel({
                     <span className="min-w-0 flex-1 truncate text-sm text-text">
                       {session.title ?? session.sessionId.slice(0, 8)}
                     </span>
+                    {/* Always visible: the row's directory is where resuming
+                        takes you — the one fact the "start new" box's picker
+                        does NOT control, so it must never be hidden. */}
                     {session.cwd ? (
-                      <span className="hidden max-w-[22ch] shrink-0 truncate font-mono text-xs
-                                       text-text-faint sm:inline">
+                      <span className="max-w-[26ch] shrink-0 truncate font-mono text-xs
+                                       text-text-faint">
                         {shortenPath(session.cwd, home)}
                       </span>
                     ) : null}

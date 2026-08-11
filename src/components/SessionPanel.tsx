@@ -114,6 +114,7 @@ export function SessionPanel({
       <PanelComposer
         status={tab.status}
         permissionMode={tab.permissionMode}
+        cwd={tab.cwd}
         panelFocused={panelFocused}
         autoFocusToken={autoFocusToken}
         draft={tab.draft}

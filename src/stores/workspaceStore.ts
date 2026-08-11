@@ -124,6 +124,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     const panelId = newId()
     const refId = newId()
 
+    /*
+     * A panel created without an explicit directory inherits the focused
+     * panel's. ⌥T beside a session working in ~/projects/foo almost always
+     * means "another one, here" — inheriting nothing meant the new session
+     * silently started in the app's own cwd, a place nobody chose. Resumes are
+     * unaffected: they always arrive with their own stored cwd in `options`.
+     */
+    const focused = selectFocusedPanel(state)
+    const cwd = options.cwd ?? (options.resume ? undefined : focused?.cwd)
+
     const panel: Panel = {
       id: panelId,
       kind,
@@ -133,11 +143,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       title:
         options.title ??
         (kind === 'terminal'
-          ? options.cwd
-            ? (options.cwd.split('/').filter(Boolean).pop() ?? 'Terminal')
-            : 'Terminal'
+          ? (cwd?.split('/').filter(Boolean).pop() ?? 'Terminal')
           : 'New session'),
-      cwd: options.cwd,
+      cwd,
     }
 
     // Split the focused panel, along its longer axis unless told otherwise, so a
@@ -158,7 +166,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
 
     if (kind === 'session') {
       await useSessionStore.getState().openTabWithId(refId, {
-        cwd: options.cwd,
+        cwd,
         resume: options.resume,
         title: options.title,
       })

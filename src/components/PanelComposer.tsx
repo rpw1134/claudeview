@@ -44,6 +44,7 @@ const MAX_ATTACHMENTS = 20
 export function PanelComposer({
   status,
   permissionMode,
+  cwd,
   panelFocused,
   autoFocusToken,
   draft,
@@ -55,6 +56,8 @@ export function PanelComposer({
 }: {
   status: SessionStatus
   permissionMode: PermissionMode
+  /** The session's working directory, shown as a permanent fact of the composer. */
+  cwd?: string
   panelFocused: boolean
   /**
    * The unsent message, owned by the tab. Not local state: this component
@@ -243,6 +246,24 @@ export function PanelComposer({
           />
 
           <div className="flex items-center justify-end gap-1 px-2 pb-1.5">
+            {/*
+              Where this conversation lives, stated where you type. The header
+              shows the path only in wide panels, and "which directory am I in"
+              is exactly the question you ask at the moment of instructing an
+              agent — so the answer sits beside the send button, always. Flush
+              left: it's a fact about the session, not a control like the rest
+              of this row.
+            */}
+            {cwd ? (
+              <span
+                className="mr-auto flex min-w-0 items-center gap-1 px-1 font-mono text-xs
+                           text-text-faint"
+                title={cwd}
+              >
+                <Folder size={11} className="shrink-0" aria-hidden />
+                <span className="truncate">{cwd.split('/').filter(Boolean).pop() ?? cwd}</span>
+              </span>
+            ) : null}
             <PermissionMenu
               value={permissionMode}
               disabled={disabled}
