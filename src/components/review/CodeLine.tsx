@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { MessageSquare } from 'lucide-react'
 import type { ReviewLineMark } from '@shared/ipc'
 import { cn } from '@/lib/utils'
+import { useRevealedRef } from './useSplitSync'
 
 /**
  * One line of read-only code: number, change mark, source.
@@ -66,6 +67,7 @@ export const CodeLine = memo(function CodeLine({
   commentCount,
   hasUnresolved,
   commentsExpanded,
+  revealed = false,
   onGutterMouseDown,
   onGutterMouseEnter,
   onToggleComments,
@@ -74,6 +76,12 @@ export const CodeLine = memo(function CodeLine({
   html: string
   kind: ReviewLineMark['kind'] | undefined
   selected: boolean
+  /**
+   * Split view is pointing at this line from the preview side. It wears the same
+   * accent wash a selection does — one vocabulary for "this is the bit in question"
+   * — and scrolls itself into view.
+   */
+  revealed?: boolean
   /** How many comments are anchored to this line — 0 renders no marker. */
   commentCount: number
   hasUnresolved: boolean
@@ -83,6 +91,8 @@ export const CodeLine = memo(function CodeLine({
   onGutterMouseEnter: (line: number) => void
   onToggleComments: (line: number) => void
 }) {
+  const revealRef = useRevealedRef<HTMLDivElement>(revealed)
+
   return (
     // `w-max min-w-full`: a long line widens the row, and the scroll container
     // around the pane scrolls all of them together — otherwise each line would
@@ -92,9 +102,11 @@ export const CodeLine = memo(function CodeLine({
     // *intent* — you are about to say something about them — and a raised grey
     // was indistinguishable from the hover state of a row you'd merely passed over.
     <div
+      ref={revealRef}
+      data-line={number}
       className={cn(
-        'group flex w-max min-w-full items-stretch',
-        selected && 'bg-accent-wash',
+        'group flex w-max min-w-full items-stretch transition-colors',
+        (selected || revealed) && 'bg-accent-wash',
       )}
     >
       {/*
