@@ -1,4 +1,4 @@
-import hljs from 'highlight.js/lib/common'
+import { hljs, languageForPath } from '@/lib/languages'
 
 /**
  * Line-accurate syntax highlighting for the review pane.
@@ -29,49 +29,12 @@ import hljs from 'highlight.js/lib/common'
 export const MAX_LINES = 5000
 
 /**
- * Extension -> hljs grammar. Small and explicit: every entry here is a language
- * shipped in `highlight.js/lib/common`, so nothing widens the bundle.
+ * Extension -> grammar now lives in `src/lib/languages.ts`, shared with the
+ * transcript's code-block highlighting. Two maps meant the review pane and the
+ * chat could disagree about whether, say, `.kt` was a supported language; one
+ * registry means adding a grammar lights it up in both places at once.
  */
-const LANGUAGES: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  py: 'python',
-  rs: 'rust',
-  go: 'go',
-  rb: 'ruby',
-  java: 'java',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  cc: 'cpp',
-  hpp: 'cpp',
-  css: 'css',
-  scss: 'scss',
-  html: 'xml',
-  xml: 'xml',
-  json: 'json',
-  md: 'markdown',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  yaml: 'yaml',
-  yml: 'yaml',
-  toml: 'ini',
-  ini: 'ini',
-  sql: 'sql',
-}
-
-export function languageFor(path: string): string | null {
-  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-  const language = LANGUAGES[extension]
-  return language && hljs.getLanguage(language) ? language : null
-}
+export const languageFor = languageForPath
 
 function escapeHtml(text: string): string {
   return text
@@ -146,7 +109,7 @@ export function highlightFile(path: string, content: string): HighlightedFile {
     return { lines: cached.lines, totalLines: all.length, truncated }
   }
 
-  const language = languageFor(path)
+  const language = languageForPath(path)
   let lines: string[]
   if (language) {
     try {

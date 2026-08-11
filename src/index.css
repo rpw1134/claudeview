@@ -577,3 +577,63 @@ textarea,
 .driver-popover-arrow-side-bottom {
   border-bottom-color: var(--overlay);
 }
+
+/*
+ * Math (KaTeX).
+ *
+ * KaTeX ships its own stylesheet — imported from src/lib/markdown.ts so its fonts
+ * go through Vite's asset pipeline — and it is left alone. What is added here is
+ * only the part it cannot know: how a formula sits inside *this* transcript.
+ */
+
+/*
+ * Inherit the surrounding text colour instead of KaTeX's default black. Nothing
+ * else in the transcript is a fixed colour, and a formula that stays black through
+ * a dark colorway is the single most obvious way this could look bolted on.
+ */
+.prose-stream .katex {
+  color: inherit;
+  font-size: 1.05em;
+}
+
+/*
+ * A display formula is a block that can be wider than the panel — a long derivation
+ * or a wide matrix — so it scrolls on its own axis rather than widening the message
+ * and putting a horizontal scrollbar on the whole transcript. Same contract as
+ * `pre` and `table` above, and like them it opts out of `--measure`: the line-width
+ * setting exists for running prose, and clamping a formula only truncates it.
+ */
+.prose-stream .math-display {
+  margin: 16px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Room for the scrollbar so it never overlaps a descender. */
+  padding-bottom: 2px;
+}
+.prose-stream .math-display .katex-display {
+  margin: 0;
+}
+
+/*
+ * Mermaid diagrams.
+ *
+ * The container is styled, never the SVG's internals: colours come from
+ * `themeVariables` at render time (see mermaid.ts theme mapping in markdown.ts), so
+ * restyling the SVG here would mean two sources of truth for diagram colour that
+ * drift the moment a colorway changes.
+ */
+.prose-stream .mermaid-diagram {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--code-bg);
+  /* Uneven corners, matching `pre` — both are drawn objects, not chrome. */
+  border-radius: 12px 9px 13px 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  text-align: center;
+}
+.prose-stream .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
