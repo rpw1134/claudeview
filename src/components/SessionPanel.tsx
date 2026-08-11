@@ -114,7 +114,9 @@ export function SessionPanel({
       <PanelComposer
         status={tab.status}
         permissionMode={tab.permissionMode}
-        cwd={tab.cwd}
+        // No cwd here: the directory is a property of the session, not of the
+        // message you're about to send, so it lives in the panel header where
+        // it's visible the whole time rather than beside the caret.
         panelFocused={panelFocused}
         autoFocusToken={autoFocusToken}
         draft={tab.draft}

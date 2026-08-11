@@ -44,8 +44,12 @@ import { cn, shortenPath, timeAgo } from '@/lib/utils'
  * ## No boxes inside boxes
  *
  * No cards at all. Grouping is spacing, a heading, and a drawn rule (Gestalt
- * proximity); rows gain a fill only on hover. The previous version nested a bordered
- * field inside a bordered card, and removing the outer box lost nothing but lines.
+ * proximity); rows gain a fill only on hover. Two intermediate versions each put a
+ * border back — one around the whole page, one around the start-new cluster — and
+ * both times the box was standing in for spacing that hadn't been spent yet. The
+ * page is now two parallel sections, "Start new" and "Recent sessions", identical
+ * in heading and rule, 48px apart, 12px tight inside. A card inside a page is a
+ * second frame around content that already had one.
  */
 export function NewSessionPanel({
   home,
@@ -53,7 +57,18 @@ export function NewSessionPanel({
   onStartTerminal,
 }: {
   home?: string
-  onStart: (options: { cwd?: string; resume?: string; title?: string }) => void
+  /**
+   * `start` tells the workspace this session's directory is already settled, so
+   * the new panel skips the start form it shows for ⌥T and splits. Everything
+   * launched from this page qualifies: you either picked the directory above or
+   * you're resuming a session that carries its own.
+   */
+  onStart: (options: {
+    cwd?: string
+    resume?: string
+    title?: string
+    start?: boolean
+  }) => void
   onStartTerminal: (cwd?: string) => void
 }) {
   const name = useProfileStore((state) => state.name)
@@ -82,6 +97,27 @@ export function NewSessionPanel({
       cancelled = true
     }
   }, [scope, cwd])
+
+  /*
+   * Name the default directory instead of describing it.
+   *
+   * This control used to read "the app's own directory" until you picked
+   * something — a phrase you can't check against the repo you meant, and one
+   * that left the resulting session with no cwd at all, so its panel header had
+   * nothing to show. Resolving the real path makes the default inspectable and
+   * gives every session started here a directory to state.
+   */
+  useEffect(() => {
+    let cancelled = false
+
+    void api['app:info']().then((info) => {
+      if (!cancelled && info?.cwd) setCwd((current) => current ?? info.cwd)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const pickDirectory = async () => {
     const picked = await api['app:pick-directory']()
@@ -114,19 +150,24 @@ export function NewSessionPanel({
         </p>
 
         {/*
-          The directory and the two start actions live inside ONE bounded group,
-          because the directory applies to exactly these and nothing else. It used
-          to float above both this cluster and the resume list, and read as a page-
-          wide setting — people reasonably assumed it re-scoped their resumes,
-          which resume never does (a resumed session continues in the directory it
-          was born in; each row states its own below). The border earns its place
-          here: it draws the scope boundary that spacing alone failed to draw.
+          Two scopes, drawn with space instead of a box.
+
+          The directory applies to the two buttons beside it and to nothing else —
+          resuming always continues in the directory the session was born in. An
+          earlier version stated that boundary by putting a border around the
+          cluster, which produced a card sitting inside the page for the sake of
+          grouping three controls. Boxes are the last tool for this, not the
+          first: the two sections are now siblings with identical headings and
+          identical drawn rules (parallel structure), 12px of air inside each
+          group and 48px between them, so proximity does what the border was
+          doing. Each resume row still states its own path, which is the other
+          half of why nobody reads the picker as re-scoping the list.
         */}
-        <div className="hand-1 mt-8 border border-line bg-surface/40 p-4">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-text-faint">
-            Start new — in this directory
-          </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
+        <section className="mt-12">
+          <h2 className="text-sm font-medium text-text">Start new</h2>
+          <SketchRule className="mb-1 mt-3 text-ink-faint" />
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
               onClick={pickDirectory}
               data-tour="directory"
@@ -141,7 +182,7 @@ export function NewSessionPanel({
                 )}
                 title={cwd}
               >
-                {cwd ? shortenPath(cwd, home) : 'the app’s own directory'}
+                {cwd ? shortenPath(cwd, home) : 'Choose a directory'}
               </span>
               <span className="shrink-0 text-xs text-text-faint group-hover:text-accent">
                 change
@@ -152,7 +193,9 @@ export function NewSessionPanel({
               <Button
                 variant="primary"
                 size="lg"
-                onClick={() => onStart({ cwd })}
+                // `start`: the directory is right there, chosen on this page, so
+                // the panel has nothing left to ask and spawns immediately.
+                onClick={() => onStart({ cwd, start: true })}
                 data-tour="new-session"
                 className="h-12 px-5"
               >
@@ -172,7 +215,7 @@ export function NewSessionPanel({
               </Button>
             </div>
           </div>
-        </div>
+        </section>
 
         <section className="mt-12">
           <h2 className="text-sm font-medium text-text">Recent sessions</h2>
@@ -223,7 +266,7 @@ export function NewSessionPanel({
 
           {/* The drawn rule stays: this is what "hand as accent" means — one
               quiet stroke marking a section, not a voice for headings. */}
-          <SketchRule className="mb-1 mt-4 text-ink-faint" />
+          <SketchRule className="mb-1 mt-3 text-ink-faint" />
 
           {loading ? (
             <p className="flex items-center gap-2 px-2 py-8 text-sm text-text-faint">

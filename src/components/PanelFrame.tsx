@@ -5,6 +5,7 @@ import { selectPanelNumber, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
+import { PanelStartForm } from './PanelStartForm'
 import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
 import { Button } from './ui/Button'
 import { cn, compactTokens, shortenPath } from '@/lib/utils'
@@ -27,6 +28,14 @@ import { cn, compactTokens, shortenPath } from '@/lib/utils'
  * Colour isn't the only carrier: the focused panel's title also moves to full
  * contrast while the others sit at muted. One glance finds the live panel; nothing
  * on screen has to grow a border to say so.
+ *
+ * ## The header's narrowing order
+ *
+ * Everything in the header competes for one 32px strip, so what it drops as the
+ * panel narrows is a ranking of what a panel owes you. In order of what survives:
+ * the focus icon and panel number (never drop), the **directory** (never drops —
+ * it's the fact that decides whether you're about to type into the right repo),
+ * the title (truncates), and model/tokens (gone below 32rem).
  */
 export const PanelFrame = memo(function PanelFrame({
   panel,
@@ -55,6 +64,9 @@ export const PanelFrame = memo(function PanelFrame({
   const number = useWorkspaceStore(selectPanelNumber(panel.id))
 
   const title = tab?.title ?? panel.title
+  // The session's own cwd wins: the CLI reports where it actually attached, which
+  // is the truth a resumed session carries and the panel record only predicted.
+  const cwd = tab?.cwd ?? panel.cwd
   const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
   const isBusy = tab ? isBusyStatus(tab.status) : false
 
@@ -97,7 +109,14 @@ export const PanelFrame = memo(function PanelFrame({
           aria-hidden
         />
 
-        <span className={cn('truncate', focused ? 'text-text' : 'text-text-muted')}>{title}</span>
+        {/* Title gives up width first: it's the one thing here you named
+            yourself, so it's the one thing you can reconstruct from memory. */}
+        <span
+          className={cn('min-w-0 flex-1 truncate', focused ? 'text-text' : 'text-text-muted')}
+          title={title}
+        >
+          {title}
+        </span>
 
         {/*
           Glyph only. The transcript carries the labelled indicator, at the tail of
@@ -108,18 +127,41 @@ export const PanelFrame = memo(function PanelFrame({
         */}
         {tab && isBusy ? <ActivityIndicator status={tab.status} compact /> : null}
 
-        <span
-          className="ml-auto truncate font-mono text-xs text-text-faint"
-          title={[panel.cwd, meta].filter(Boolean).join('  ·  ')}
-        >
-          {/* Metadata first: it changes as you work, whereas cwd is fixed and
-              already implied by the session's title. Narrow panels drop the cwd. */}
-          {meta ? <span className="hidden @[20rem]:inline">{meta}</span> : null}
-          {meta && panel.cwd ? <span className="mx-1 hidden opacity-50 @[28rem]:inline">·</span> : null}
-          {panel.cwd ? (
-            <span className="hidden @[28rem]:inline">{shortenPath(panel.cwd, home)}</span>
-          ) : null}
-        </span>
+        {/*
+          The directory outranks the metrics, and the previous order had it
+          backwards: model and token count held the line while the cwd dropped
+          out at 28rem, so the narrower the panel — the more panels you had open,
+          the easier they were to confuse — the less each one said about where it
+          was. Now the path is the last thing to go (it never goes), and model and
+          tokens, which are only ever glanceable trivia, leave first.
+
+          Full path on hover, since what's shown is shortened to three segments.
+        */}
+        {cwd ? (
+          <span
+            className="min-w-0 max-w-[55%] shrink-0 truncate font-mono text-xs text-text-faint"
+            title={cwd}
+          >
+            {/* Below 20rem even a three-segment path eats the whole strip and
+                squeezes the title to nothing, so the narrowest panels show the
+                directory's own name — the part that identifies it — and the
+                full path stays one hover away. */}
+            <span className="@[20rem]:hidden">{cwd.split('/').filter(Boolean).pop()}</span>
+            <span className="hidden @[20rem]:inline">{shortenPath(cwd, home)}</span>
+          </span>
+        ) : null}
+
+        {meta ? (
+          <span
+            className="hidden shrink-0 font-mono text-xs text-text-faint @[32rem]:inline"
+            title={meta}
+          >
+            {/* The separator belongs to the metadata, not between it and the
+                path: it has to disappear along with the thing it separates. */}
+            <span className="mr-1 opacity-50">·</span>
+            {meta}
+          </span>
+        ) : null}
 
         <Button
           variant="ghost"
@@ -135,7 +177,17 @@ export const PanelFrame = memo(function PanelFrame({
       </header>
 
       <div className="min-h-0 flex-1 overflow-hidden bg-bg">
-        {panel.kind === 'terminal' ? (
+        {panel.kind === 'session' && panel.pending ? (
+          // No tab exists yet, so there is nothing for SessionPanel to render:
+          // the panel is a question, not a conversation.
+          <PanelStartForm
+            panelId={panel.id}
+            cwd={panel.pending.cwd}
+            home={home}
+            panelFocused={focused}
+            autoFocusToken={autoFocusToken}
+          />
+        ) : panel.kind === 'terminal' ? (
           <TerminalPanel
             terminalId={panel.refId}
             cwd={panel.cwd}

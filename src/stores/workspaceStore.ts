@@ -37,6 +37,19 @@ export type Panel = {
   refId: string
   title: string
   cwd?: string
+  /**
+   * Present while a session panel is waiting to be aimed.
+   *
+   * A panel opened by ⌥T, the toolbar, or a split has no directory the user
+   * chose — inheriting one silently started a subprocess somewhere nobody
+   * picked, and the only way to correct it was to close the panel and start
+   * over. So the panel now exists *before* the session does: it holds a
+   * proposed cwd (the focused panel's, as a default), shows a start form, and
+   * spawns nothing until Start. Its presence is what marks the pre-start state
+   * — `cwd` stays unset until the choice is committed, so the header never
+   * claims a directory the session isn't running in.
+   */
+  pending?: { cwd?: string }
 }
 
 export const MAX_PANELS = 8
@@ -73,8 +86,23 @@ type WorkspaceState = {
   setMode: (mode: 'panels' | 'review') => void
   addPanel: (
     kind: PanelKind,
-    options?: { cwd?: string; resume?: string; title?: string; direction?: SplitDirection },
+    options?: {
+      cwd?: string
+      resume?: string
+      title?: string
+      direction?: SplitDirection
+      /**
+       * The caller already knows where this session belongs, so skip the start
+       * form and spawn immediately. Set by the landing page — it picked the
+       * directory, or is resuming a session that carries its own.
+       */
+      start?: boolean
+    },
   ) => Promise<void>
+  /** Change a pre-start panel's proposed directory, before anything is spawned. */
+  setPanelPendingCwd: (panelId: string, cwd?: string) => void
+  /** Commit a pre-start panel: spawn its session in the chosen directory. */
+  startPanelSession: (panelId: string, cwd?: string) => Promise<void>
   closePanel: (panelId: string) => Promise<void>
   renamePanel: (panelId: string, title: string) => void
 
@@ -125,14 +153,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     const refId = newId()
 
     /*
-     * A panel created without an explicit directory inherits the focused
+     * A panel created without an explicit directory *proposes* the focused
      * panel's. ⌥T beside a session working in ~/projects/foo almost always
-     * means "another one, here" — inheriting nothing meant the new session
-     * silently started in the app's own cwd, a place nobody chose. Resumes are
-     * unaffected: they always arrive with their own stored cwd in `options`.
+     * means "another one, here" — but "almost always" is not "always", and an
+     * inherited cwd applied silently is a guess the user can't see or correct.
+     * So for sessions it becomes a default in the start form rather than a
+     * fait accompli. Resumes are unaffected: they arrive with their own cwd.
+     * A pre-start panel proposes its own pending cwd onward, so ⌥T twice in a
+     * row doesn't lose the directory you were about to choose.
      */
     const focused = selectFocusedPanel(state)
-    const cwd = options.cwd ?? (options.resume ? undefined : focused?.cwd)
+    const inherited = focused?.cwd ?? focused?.pending?.cwd
+    const cwd = options.cwd ?? (options.resume ? undefined : inherited)
+
+    /*
+     * Terminals still auto-start: a shell prints its directory in the prompt,
+     * so it states where it is without being asked, and `cd` is the correction.
+     * A session states nothing until it has already acted, which is why only
+     * sessions are worth a form.
+     */
+    const deferStart = kind === 'session' && !options.start && !options.resume
 
     const panel: Panel = {
       id: panelId,
@@ -145,7 +185,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
         (kind === 'terminal'
           ? (cwd?.split('/').filter(Boolean).pop() ?? 'Terminal')
           : 'New session'),
-      cwd,
+      // Unset while pending: the panel isn't running anywhere yet.
+      cwd: deferStart ? undefined : cwd,
+      pending: deferStart ? { cwd } : undefined,
     }
 
     // Split the focused panel, along its longer axis unless told otherwise, so a
@@ -164,7 +206,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       focusedPanelId: panelId,
     })
 
-    if (kind === 'session') {
+    if (kind === 'session' && !deferStart) {
       await useSessionStore.getState().openTabWithId(refId, {
         cwd,
         resume: options.resume,
@@ -173,6 +215,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     }
     // Terminals are created by the panel component, which knows its pixel size and
     // can therefore spawn the PTY at the right cols/rows the first time.
+  },
+
+  setPanelPendingCwd: (panelId, cwd) =>
+    setState((state) => ({
+      panels: state.panels.map((entry) =>
+        entry.id === panelId && entry.pending ? { ...entry, pending: { cwd } } : entry,
+      ),
+    })),
+
+  startPanelSession: async (panelId, cwd) => {
+    const panel = getState().panels.find((entry) => entry.id === panelId)
+    // Only a pending panel can be started, so a double submit (Enter held, or a
+    // click landing after the keypress) can't spawn a second subprocess against
+    // the same refId.
+    if (!panel?.pending) return
+
+    setState((state) => ({
+      panels: state.panels.map((entry) =>
+        entry.id === panelId ? { ...entry, cwd, pending: undefined } : entry,
+      ),
+    }))
+
+    await useSessionStore.getState().openTabWithId(panel.refId, { cwd })
   },
 
   closePanel: async (panelId) => {
@@ -194,7 +259,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
     })
 
     if (panel.kind === 'session') {
-      await useSessionStore.getState().closeTab(panel.refId)
+      // A pre-start panel owns nothing: no tab, no subprocess, no persisted
+      // entry. Calling closeTab would send session:close for an id the main
+      // process has never heard of.
+      if (!panel.pending) await useSessionStore.getState().closeTab(panel.refId)
     } else {
       await api['terminal:close']({ id: panel.refId })
     }
