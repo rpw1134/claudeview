@@ -13,6 +13,7 @@ import './elapsed.test'
 import './frontmatter.test'
 import './normalizer.test'
 import './lineDiff.test'
+import './markdownSyntax.test'
 import './toolGroups.test'
 import { report } from './harness'
 

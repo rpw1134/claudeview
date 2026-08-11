@@ -2,6 +2,15 @@ import { Marked, type TokenizerAndRendererExtension, type Tokens } from 'marked'
 import DOMPurify, { type Config as PurifyConfig } from 'dompurify'
 import katex from 'katex'
 import { hljs } from '@/lib/languages'
+import {
+  displayMathStart,
+  inlineMathStart,
+  isMathFence,
+  matchDisplayMath,
+  matchInlineMath,
+} from '@/lib/markdownSyntax'
+
+export { splitStream } from '@/lib/markdownSyntax'
 
 // KaTeX's stylesheet, imported here rather than appended to index.css so the fonts
 // it references resolve through Vite's asset pipeline: the 60 `KaTeX_*.woff2` files
@@ -37,7 +46,9 @@ import 'katex/dist/katex.min.css'
  *
  *  - **Math (KaTeX)** is cheap and synchronous, so it is a normal marked extension
  *    and runs in both halves. It participates in the ordinary parse, which means its
- *    output reaches DOMPurify with everything else rather than beside it.
+ *    output reaches DOMPurify with everything else rather than beside it. Both the
+ *    delimiter forms (`$$…$$`, `\[…\]`, `$…$`, `\(…\)`) and math-tagged fences
+ *    (```` ```math ````/`latex`/`katex`/`tex`) come through here.
  *  - **Syntax highlighting** re-tokenizes whole code blocks, so it is a post-render
  *    DOM pass over settled content only.
  *  - **Mermaid** is a ~1MB dependency and a full layout engine, so it is
@@ -48,35 +59,10 @@ import 'katex/dist/katex.min.css'
 /* ------------------------------------------------------------------ math ---- */
 
 /**
- * Delimiters, deliberately conservative. A false negative — math that renders as
- * literal text — is a cosmetic annoyance. A false positive turns "it costs $5 and
- * change, or $12 for the large" into mangled italic gibberish, which is worse than
- * never supporting inline math at all. So:
- *
- *  - `$$…$$`  display. Unambiguous, may span lines.
- *  - `\[…\]`  display. Unambiguous.
- *  - `\(…\)`  inline. Unambiguous.
- *  - `$…$`    inline, and only when *all* of these hold:
- *       · the opener is followed by a non-space character,
- *       · the closer is preceded by a non-space character,
- *       · there is no newline between them (a `$` opening a run that closes three
- *         paragraphs later is a currency symbol, not an expression),
- *       · the closer is not followed by a digit — this is what saves `$5–$10`,
- *         whose middle would otherwise satisfy every other rule,
- *       · the content is not purely numeric/punctuation — `$1,000$` is money,
- *       · the content carries some notation, and is not a bare shell variable —
- *         `$PATH:$HOME` is the one that matters in a developer tool, and it
- *         satisfies every rule above.
- *
- * `\$` is left alone: marked's own escape tokenizer claims it before we are asked,
- * and the `start` hook below refuses to cut a text run at a backslash-escaped
- * dollar.
+ * The delimiter rules — and why each one refuses to fire — live in
+ * `@/lib/markdownSyntax`, which is pure and covered by `npm test`. What is left here
+ * is the wiring: marked extensions on one side, KaTeX on the other.
  */
-const INLINE_MONEY = /^[\s\d.,:%+-]*$/
-/** An operator, a brace, a backslash or a digit — something that isn't just prose. */
-const MATH_SIGNAL = /[\\^_{}=+*/<>|()[\]-]|\d/
-/** `$HOME`, `${PATH}`, `$AWS_REGION`. Real notation is rarely a bare SCREAMING word. */
-const SHELL_VARIABLE = /^\{?[A-Z][A-Z0-9_]*\}?$/
 
 function renderMath(source: string, displayMode: boolean): string {
   // `throwOnError: false` renders a parse failure as a red inline marker, which is
@@ -88,14 +74,10 @@ function renderMath(source: string, displayMode: boolean): string {
 const displayMath: TokenizerAndRendererExtension = {
   name: 'displayMath',
   level: 'block',
-  start(src: string) {
-    const index = src.search(/\$\$|\\\[/)
-    return index < 0 ? undefined : index
-  },
+  start: displayMathStart,
   tokenizer(src: string) {
-    const match = /^(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])(?:\n+|$)/.exec(src)
-    if (!match) return undefined
-    return { type: 'displayMath', raw: match[0], text: (match[1] ?? match[2] ?? '').trim() }
+    const match = matchDisplayMath(src)
+    return match ? { type: 'displayMath', ...match } : undefined
   },
   renderer(token: Tokens.Generic) {
     return `<p class="math-display">${renderMath(String(token.text), true)}</p>`
@@ -105,27 +87,10 @@ const displayMath: TokenizerAndRendererExtension = {
 const inlineMath: TokenizerAndRendererExtension = {
   name: 'inlineMath',
   level: 'inline',
-  start(src: string) {
-    // `(^|[^\\$])` so an escaped `\$` never becomes a cut point: splitting the text
-    // run there would strand the backslash as literal output.
-    const match = /(^|[^\\$])(\$|\\\()/.exec(src)
-    return match ? match.index + (match[1]?.length ?? 0) : undefined
-  },
+  start: inlineMathStart,
   tokenizer(src: string) {
-    const paren = /^\\\(([\s\S]+?)\\\)/.exec(src)
-    if (paren) return { type: 'inlineMath', raw: paren[0], text: (paren[1] ?? '').trim() }
-
-    const dollar = /^\$([^\n$]+)\$(?!\d)/.exec(src)
-    if (!dollar) return undefined
-
-    const body = dollar[1] ?? ''
-    if (/^\s/.test(body) || /\s$/.test(body)) return undefined
-    if (INLINE_MONEY.test(body)) return undefined
-    if (SHELL_VARIABLE.test(body)) return undefined
-    // One or two characters is the `$n$` / `$xy$` case, where there is no room for a
-    // signal; beyond that, prose with no notation in it is prose.
-    if (body.length > 2 && !MATH_SIGNAL.test(body)) return undefined
-    return { type: 'inlineMath', raw: dollar[0], text: body }
+    const match = matchInlineMath(src)
+    return match ? { type: 'inlineMath', ...match } : undefined
   },
   renderer(token: Tokens.Generic) {
     return renderMath(String(token.text), false)
@@ -137,6 +102,38 @@ const marked = new Marked({
   breaks: true,
 })
 marked.use({ extensions: [displayMath, inlineMath] })
+
+/**
+ * ```` ```math ````, ```` ```latex ````, ```` ```katex ````, ```` ```tex ```` render
+ * as formulae rather than as source.
+ *
+ * This is a renderer override rather than a tokenizer, so the fence is still lexed by
+ * marked's own fence rule — the content arrives already un-fenced and un-escaped, and
+ * a fence that *isn't* math is untouched.
+ *
+ * `throwOnError: true` here, unlike `renderMath`: a fence carries its own perfectly
+ * good fallback. Returning `false` from a renderer hands the token back to marked's
+ * default, so invalid TeX degrades to the syntax-highlighted code block the reader
+ * would have seen before — the source, legibly — instead of KaTeX's red error text
+ * with the expression lost inside it.
+ */
+marked.use({
+  renderer: {
+    code(token: Tokens.Code) {
+      if (!isMathFence(token.lang ?? '')) return false
+      try {
+        const html = katex.renderToString(token.text, {
+          throwOnError: true,
+          output: 'html',
+          displayMode: true,
+        })
+        return `<p class="math-display">${html}</p>`
+      } catch {
+        return false
+      }
+    },
+  },
+})
 
 /* ----------------------------------------------------------- sanitization ---- */
 
@@ -248,57 +245,6 @@ export function renderStable(source: string): string {
   return html
 }
 
-/* ------------------------------------------------------------ split-parse ---- */
-
-/**
- * Split into `[settled, inProgress]` at the last blank line.
- *
- * Inside an unterminated fenced code block the whole text is treated as tail: a
- * blank line within a fence isn't a block boundary, and splitting there would parse
- * half a fence and flash a broken code block on screen. A half-arrived `$$…$$`
- * display block has the same problem and gets the same treatment.
- */
-export function splitStream(text: string): [stable: string, tail: string] {
-  if (text.length < 200) return ['', text]
-
-  if (hasOpenCodeFence(text)) return splitBefore(text, '\n```')
-  if (hasOpenDisplayMath(text)) return splitBefore(text, '\n$$')
-
-  const boundary = text.lastIndexOf('\n\n')
-  if (boundary <= 0) return ['', text]
-  return [text.slice(0, boundary + 2), text.slice(boundary + 2)]
-}
-
-/** Cut immediately before the last occurrence of `marker`, or treat it all as tail. */
-function splitBefore(text: string, marker: string): [stable: string, tail: string] {
-  const start = text.lastIndexOf(marker)
-  if (start > 0) return [text.slice(0, start + 1), text.slice(start + 1)]
-  return ['', text]
-}
-
-function countOccurrences(text: string, needle: string): number {
-  let count = 0
-  let index = text.indexOf(needle)
-  while (index !== -1) {
-    count += 1
-    index = text.indexOf(needle, index + needle.length)
-  }
-  return count
-}
-
-function hasOpenCodeFence(text: string): boolean {
-  return countOccurrences(text, '```') % 2 === 1
-}
-
-/**
- * An odd number of `$$` means a display block is still open. Inline `$…$` cannot
- * confuse this — it is a single dollar — and a stray literal `$$` at worst defers
- * the split for a frame or two, which is invisible.
- */
-function hasOpenDisplayMath(text: string): boolean {
-  return countOccurrences(text, '$$') % 2 === 1
-}
-
 /* ------------------------------------------------------- post-render passes -- */
 
 /** Fenced blocks tagged `mermaid` are diagrams, not code; they get their own pass. */
@@ -371,12 +317,93 @@ export async function renderMermaidBlocks(root: HTMLElement): Promise<void> {
     node.dataset.mermaidDone = 'true'
     if (!svg) continue
 
+    // Read the em basis from the block's own position in the tree, before it is
+    // replaced: this is the font-size the diagram will inherit.
+    const basis = Number.parseFloat(getComputedStyle(node).fontSize) || 16
+
     const figure = document.createElement('div')
     figure.className = 'mermaid-diagram'
     figure.dataset.mermaidDone = 'true'
     figure.innerHTML = svg
+    const element = figure.querySelector('svg')
+    if (element) sizeDiagram(figure, element, basis)
     node.replaceWith(figure)
   }
+}
+
+/**
+ * The height a diagram may occupy, in `em`, and the container padding it sits
+ * inside. Both mirror `.mermaid-diagram` in index.css.
+ */
+const MAX_DIAGRAM_HEIGHT_EM = 24.5
+const DIAGRAM_PADDING_EM = 1.5
+
+/**
+ * How far a diagram may be shrunk to make it fit.
+ *
+ * Mermaid's labels are laid out at ~16px, so 0.6 puts them just under 10px — the
+ * floor of readable. Below that, shrinking has stopped being a fix and become a
+ * different bug: a twenty-node flowchart scaled to fit 24.5em is a grey smudge.
+ * Measured on the eight-node chain used to verify this: fitting it to the cap needed
+ * 0.48, giving a 68px-wide diagram with unreadable labels.
+ */
+const MIN_DIAGRAM_SCALE = 0.6
+
+/**
+ * Re-express mermaid's pixel layout in `em`, shrinking anything oversized.
+ *
+ * Mermaid emits `width="100%"` plus an inline `style="max-width: 1180px"`, which is
+ * two problems at once: the diagram comes out as large as its layout happened to be
+ * (the "charts are huge" report), and being in px it is the one block in the
+ * transcript that ignores the appearance font-size and per-panel zoom.
+ *
+ * Both are fixed by dividing through: the `viewBox` gives the intrinsic size in px,
+ * `basis` is what one `em` is worth in the transcript right now, so a width in `em`
+ * is a diagram that renders at mermaid's intended size today and scales with the
+ * text from then on. The height cap is applied *to the width*, pre-scaled, because
+ * `height: auto` from the `viewBox` ratio is what keeps the two axes in step — a
+ * `max-height` would clamp one axis and squash the drawing.
+ *
+ * The width goes on the **container**, not the SVG: mermaid writes a
+ * `#mermaid-N { font-size: 16px }` rule into the SVG's own `<style>`, so an `em`
+ * length set on the SVG resolves against that fixed 16px and never moves. Measured:
+ * with the width on the SVG the diagram stayed 73px across font sizes from 9px to
+ * 22px. The container inherits the transcript's font-size like every other block, so
+ * that is where an `em` means what it says; the SVG then fills it at `width: 100%`.
+ *
+ * Scaling is one-directional: a small diagram keeps its size rather than being
+ * stretched to fill the panel.
+ */
+function sizeDiagram(figure: HTMLElement, element: SVGElement, basis: number): void {
+  const viewBox = element.getAttribute('viewBox')?.split(/[\s,]+/).map(Number)
+  const width = viewBox?.[2]
+  const height = viewBox?.[3]
+  // No viewBox, or a degenerate one: leave it to the container's own cap and
+  // scrollbars rather than compute nonsense from NaN.
+  if (!width || !height || !Number.isFinite(width) || !Number.isFinite(height)) return
+
+  const scale = fitScale(height / basis)
+
+  element.removeAttribute('width')
+  element.removeAttribute('height')
+  // Box-sizing is border-box app-wide, so the padding has to be added back or the
+  // drawing loses it off its own width.
+  figure.style.width = `${((width / basis) * scale + DIAGRAM_PADDING_EM).toFixed(3)}em`
+}
+
+/**
+ * Shrink to fit — or, if fitting would cost legibility, don't shrink at all.
+ *
+ * Three outcomes, and the middle one is the point: a diagram that already fits is
+ * left alone; one that is moderately too tall is scaled down to the cap; one that
+ * would need to go below `MIN_DIAGRAM_SCALE` is kept at full size and scrolls
+ * inside its container instead. Half-shrinking *and* scrolling — the outcome of a
+ * clamped scale — would be the worst of both.
+ */
+function fitScale(heightEm: number): number {
+  if (heightEm <= MAX_DIAGRAM_HEIGHT_EM) return 1
+  const scale = MAX_DIAGRAM_HEIGHT_EM / heightEm
+  return scale < MIN_DIAGRAM_SCALE ? 1 : scale
 }
 
 type MermaidRenderer = (source: string) => Promise<string | null>
@@ -401,6 +428,19 @@ function loadMermaid(): Promise<MermaidRenderer> {
       theme: 'base',
       themeVariables: mermaidTheme(),
       fontFamily: readVariable('--font-body') || 'sans-serif',
+      // Mermaid's `fontSize` is a number of CSS pixels, baked into the SVG's
+      // `<text>` metrics at render time — there is no em to give it. So it is
+      // seeded from the live transcript font size, which makes label text
+      // proportional to the prose at the moment of first render.
+      //
+      // LIMITATION: `initialize` runs once per process, so a later change to the
+      // appearance font-size slider or a panel's zoom does not re-seed it. It does
+      // not need to: the SVG is capped in `em` by `.mermaid-diagram svg` in
+      // index.css, so the whole diagram — labels included — scales geometrically
+      // with the surrounding text. Only the ratio of label size to node padding is
+      // fixed, and that ratio is set by the size the transcript happened to be the
+      // first time a diagram appeared.
+      fontSize: bodyFontSize(),
     })
 
     let sequence = 0
@@ -439,6 +479,9 @@ function mermaidTheme(): Record<string, string> {
   const accent = readColor('--accent')
 
   return {
+    // The knob that actually reaches the emitted CSS. Top-level `fontSize` is
+    // config, `themeVariables.fontSize` is what the stylesheet is built from.
+    fontSize: `${bodyFontSize()}px`,
     background,
     primaryColor: background,
     primaryTextColor: text,
@@ -461,6 +504,17 @@ function mermaidTheme(): Record<string, string> {
 
 function readVariable(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+/**
+ * The transcript's font size in px, clamped to a range where mermaid's layout stays
+ * sane. Read from `body`, which is where `--font-size-base` lands — the root element
+ * keeps the browser default (16px) and would put diagram labels a size above the
+ * prose they sit in.
+ */
+function bodyFontSize(): number {
+  const size = Number.parseFloat(getComputedStyle(document.body).fontSize)
+  return Number.isFinite(size) ? Math.min(Math.max(size, 10), 24) : 16
 }
 
 /** One reused 1x1 scratch canvas for `readColor`. */

@@ -618,22 +618,58 @@ textarea,
 /*
  * Mermaid diagrams.
  *
- * The container is styled, never the SVG's internals: colours come from
- * `themeVariables` at render time (see mermaid.ts theme mapping in markdown.ts), so
- * restyling the SVG here would mean two sources of truth for diagram colour that
- * drift the moment a colorway changes.
+ * The container's *colour* is never touched here beyond its own background: node
+ * and edge colours come from `themeVariables` at render time (see the theme mapping
+ * in markdown.ts), so restyling the SVG's internals would mean two sources of truth
+ * that drift the moment a colorway changes. Its *size*, though, has to be taken
+ * away from mermaid, for two reasons:
+ *
+ *  1. Mermaid lays out at its own scale and writes the result into the SVG as
+ *     `style="max-width: 1180px"` — an inline declaration, so a stylesheet can only
+ *     beat it with `!important`. Left alone, an eight-node graph is wider than the
+ *     panel and taller than the viewport: the "mermaid charts are huge" report.
+ *  2. That px cap is also font-size-deaf. Every other block in the transcript
+ *     responds to the appearance slider and to per-panel zoom because it is sized in
+ *     `em`; a diagram frozen at 1180px is the one element that doesn't move.
+ *
+ * So the cap is expressed in `em` and applied to the SVG rather than the box. An
+ * inline SVG carries an intrinsic aspect ratio from its `viewBox`, and clamping one
+ * axis of a ratio-bearing box shrinks the other to match — so `max-height` in `em`
+ * scales the whole diagram, proportionally, with the surrounding text.
  */
 .prose-stream .mermaid-diagram {
-  margin: 16px 0;
-  padding: 12px;
+  /* `auto` inline: `sizeDiagram` sets an explicit `em` width, so the box has to be
+     centred rather than left to fill the column. */
+  margin: 1em auto;
+  padding: 0.75em;
   background: var(--code-bg);
   /* Uneven corners, matching `pre` — both are drawn objects, not chrome. */
   border-radius: 12px 9px 13px 8px;
   max-width: 100%;
-  overflow-x: auto;
+  /*
+   * The backstop. `sizeDiagram` normally scales the SVG to fit 24.5em, so this
+   * only does work for an SVG it declined to touch (no `viewBox`), where the
+   * honest outcome is a scrollbox — the same contract `pre` and `table` have —
+   * rather than a diagram pushing the whole transcript down.
+   */
+  max-height: 26em;
+  overflow: auto;
   text-align: center;
 }
 .prose-stream .mermaid-diagram svg {
-  max-width: 100%;
+  /*
+   * The SVG fills whatever `em` width `sizeDiagram` gave the container — it is the
+   * container that carries the scale, because mermaid writes a `font-size: 16px`
+   * rule for the SVG into the SVG, which would make an `em` set here mean a fixed
+   * 16 px forever.
+   *
+   * `!important` on the width beats mermaid's own inline `max-width: NNNpx` — the
+   * px cap that made diagrams both huge and zoom-deaf. Nothing weaker beats an
+   * inline declaration.
+   */
+  width: 100% !important;
+  max-width: 100% !important;
+  /* The other axis, always derived from the `viewBox` ratio, so a width clamped by
+     a narrow panel shortens the diagram instead of squashing it. */
   height: auto;
 }
