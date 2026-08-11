@@ -147,6 +147,37 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     return lane
   }
 
+  /**
+   * Stop the clock on thinking rows that are still running.
+   *
+   * Scoped to one block when a `block-end` names it, and to everything still open
+   * when the turn's `result` arrives — the CLI does not reliably send `block-end`
+   * for a block the model abandoned, and an unstamped row would sit under a
+   * finished answer saying "thinking…" forever. This is the state-side mirror of
+   * `streamBuffers.finishAllFor`, which does the same for the caret.
+   *
+   * Lanes with nothing to stamp are checked before `laneFor` copies them, so a
+   * turn-end doesn't dirty every lane and re-render transcripts that didn't change.
+   */
+  const stampThinking = (laneId: string, blockKey?: string): void => {
+    const isOpen = (item: TranscriptItem): boolean =>
+      item.kind === 'thinking' &&
+      item.startedAt !== undefined &&
+      item.thoughtForMs === undefined &&
+      (blockKey === undefined || item.id === blockKey)
+
+    if (!lanes[laneId]?.items.some(isOpen)) return
+
+    const lane = laneFor(laneId)
+    const now = Date.now()
+    for (let index = 0; index < lane.items.length; index += 1) {
+      const item = lane.items[index]!
+      if (!isOpen(item)) continue
+      const thinking = item as Extract<TranscriptItem, { kind: 'thinking' }>
+      lane.items[index] = { ...thinking, thoughtForMs: now - thinking.startedAt! }
+    }
+  }
+
   for (const event of events) {
     switch (event.kind) {
       case 'text-delta':
@@ -167,17 +198,25 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
           seenBlockIds.add(bufferKey)
           const lane = laneFor(event.agent.id)
           if (event.agent.type && !lane.type) lanes[lane.id] = { ...lane, type: event.agent.type }
-          lanes[lane.id]!.items.push({
-            kind: event.kind === 'text-delta' ? 'text' : 'thinking',
-            id: bufferKey,
-            blockId: bufferKey,
-          } as TranscriptItem)
+          lanes[lane.id]!.items.push(
+            event.kind === 'text-delta'
+              ? { kind: 'text', id: bufferKey, blockId: bufferKey }
+              : {
+                  kind: 'thinking',
+                  id: bufferKey,
+                  blockId: bufferKey,
+                  // Replayed history gets no clock: the duration would measure how
+                  // fast the transcript was re-fed to us, which is meaningless.
+                  ...(event.historical ? {} : { startedAt: Date.now() }),
+                },
+          )
         }
         break
       }
 
       case 'block-end':
         streamBuffers.finish(bufferKeyFor(tab.id, event.blockId))
+        stampThinking(event.agent.id, bufferKeyFor(tab.id, event.blockId))
         break
 
       case 'user-message': {
@@ -275,6 +314,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         // model abandoned mid-turn keeps its caret blinking under a finished
         // answer, promising output that isn't coming.
         streamBuffers.finishAllFor(`${tab.id}::`)
+        // Same reasoning for the thinking rows' clocks — see stampThinking.
+        for (const laneId of Object.keys(lanes)) stampThinking(laneId)
         // Accumulate across turns so the status bar shows the session total, not
         // just the last turn.
         usage = {

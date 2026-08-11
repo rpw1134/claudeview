@@ -1,7 +1,9 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { ArrowDown, ChevronRight } from 'lucide-react'
 import type { SessionStatus } from '@shared/ipc'
 import type { Lane, TranscriptItem } from '@/types/session'
+import type { ToolItem } from '@/lib/toolGroups'
+import { groupTranscriptItems, shouldAutoExpand, summarizeToolGroup } from '@/lib/toolGroups'
 import { useStickyScroll } from '@/hooks/useStickyScroll'
 import { useIsStreaming } from '@/hooks/useStreamedText'
 import { useReviewStore } from '@/stores/reviewStore'
@@ -76,6 +78,11 @@ export function Transcript({
    * the last item and already says "thinking" with a live mark. A tail line
    * repeating the same word directly beneath it said everything twice.
    */
+  // Keyed on the items array itself: the store gives untouched lanes referential
+  // identity, so this recomputes only for the lane an event actually changed —
+  // and the group arrays it hands to memoized rows stay stable in the meantime.
+  const runs = useMemo(() => groupTranscriptItems(lane.items), [lane.items])
+
   const lastItem = lane.items[lane.items.length - 1]
   const busy = showActivity && isBusyStatus(status)
   const thinkingRowOwnsTheTail = status === 'thinking' && lastItem?.kind === 'thinking'
@@ -88,9 +95,18 @@ export function Transcript({
             afford 28px — but nothing is indented or centred within them. */}
         <div className="flex w-full flex-col px-4 py-5 @[30rem]:px-7 @[30rem]:py-7 @[48rem]:px-10 @[48rem]:py-8">
           {lane.items.length === 0 && !showActivity ? <EmptyLane /> : null}
-          {lane.items.map((item) => (
-            <TranscriptRow key={item.id} item={item} onOpenLane={onOpenLane} onRetry={onRetry} />
-          ))}
+          {runs.map((run) =>
+            run.kind === 'tool-group' ? (
+              <ToolGroupRow key={run.id} items={run.items} onOpenLane={onOpenLane} />
+            ) : (
+              <TranscriptRow
+                key={run.id}
+                item={run.item}
+                onOpenLane={onOpenLane}
+                onRetry={onRetry}
+              />
+            ),
+          )}
 
           {/*
             Activity at the tail of the conversation, where the next answer will
@@ -146,7 +162,7 @@ const TranscriptRow = memo(function TranscriptRow({
       )
 
     case 'thinking':
-      return <ThinkingBlock blockId={item.blockId} />
+      return <ThinkingBlock item={item} />
 
     case 'tool':
       return <ToolCallCard item={item} onOpenLane={onOpenLane} />
@@ -154,6 +170,77 @@ const TranscriptRow = memo(function TranscriptRow({
     case 'error':
       return <ErrorRow item={item} onRetry={onRetry} />
   }
+})
+
+/**
+ * A run of tool calls as one evolving row.
+ *
+ * ## Why this collapses
+ *
+ * A single card per call was already quiet, but an agentic turn makes twenty of
+ * them, and twenty quiet rows are not quiet — they're a wall you scroll past to
+ * find the sentence at the end. What you actually want while it runs is *one*
+ * line that keeps saying what's happening now, and afterwards *one* line saying
+ * how much happened. Both are the same row; it just changes what it says.
+ *
+ * Collapsed by default even while running, which is the whole point: the evolving
+ * label is the thing worth watching, and expanding it would put the wall back.
+ * Two exceptions open it anyway (see `shouldAutoExpand`) — a failure, and a call
+ * that spawned a subagent, whose "Open" button has nowhere to live on one line.
+ * A user's own toggle overrides both, in either direction.
+ */
+const ToolGroupRow = memo(function ToolGroupRow({
+  items,
+  onOpenLane,
+}: {
+  items: ToolItem[]
+  onOpenLane: (id: string) => void
+}) {
+  // `null` means "nobody has decided yet", which is not the same as collapsed:
+  // a group that fails on its tenth call has to be able to open itself, and it
+  // can only tell the difference if an explicit collapse is recorded as one.
+  const [override, setOverride] = useState<boolean | null>(null)
+  const summary = summarizeToolGroup(items)
+  const expanded = override ?? shouldAutoExpand(items)
+
+  return (
+    <div className="my-0.5">
+      <button
+        onClick={() => setOverride(!expanded)}
+        className="hand-sm-1 -mx-1.5 flex w-full min-w-0 items-center gap-2 px-1.5 py-1 text-xs
+                   text-text-faint transition-colors hover:text-text-muted"
+        aria-expanded={expanded}
+      >
+        <Mark
+          state={summary.running ? 'working' : 'idle'}
+          size={15}
+          className={cn('shrink-0', summary.running ? 'text-accent' : 'text-accent/60')}
+        />
+        {summary.running ? (
+          <span className="truncate font-mono">{summary.current}</span>
+        ) : (
+          <span className="shrink-0 tabular-nums">
+            {summary.total} tool calls · {summary.ok} ok
+          </span>
+        )}
+        {summary.failed > 0 ? (
+          <span className="shrink-0 tabular-nums text-danger">· {summary.failed} failed</span>
+        ) : null}
+        <ChevronRight
+          size={12}
+          className={cn('shrink-0 transition-transform duration-150', expanded && 'rotate-90')}
+        />
+      </button>
+
+      {expanded ? (
+        <div>
+          {items.map((item) => (
+            <ToolCallCard key={item.id} item={item} onOpenLane={onOpenLane} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 })
 
 /**
@@ -193,12 +280,13 @@ function UserTurn({ text }: { text: string }) {
  * The mark belongs here because this is the row about the agent *working*. The
  * answer below it doesn't need a badge; it's the only thing on that side.
  */
-function ThinkingBlock({ blockId }: { blockId: string }) {
+function ThinkingBlock({ item }: { item: Extract<TranscriptItem, { kind: 'thinking' }> }) {
   const [expanded, setExpanded] = useState(false)
   // Live while thoughts are still arriving: the mark breathes and the row is the
   // turn's indicator (the tail line stands down — see Transcript). Once the
   // thinking ends it settles to the still, faint mark.
-  const streaming = useIsStreaming(blockId)
+  const streaming = useIsStreaming(item.blockId)
+  const blockId = item.blockId
 
   return (
     <div className="my-1">
@@ -213,7 +301,7 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
           size={15}
           className={cn('shrink-0', streaming ? 'text-accent' : 'text-accent/60')}
         />
-        {streaming ? 'thinking…' : 'thinking'}
+        {streaming ? 'thinking…' : thoughtLabel(item.thoughtForMs)}
         <ChevronRight
           size={12}
           className={cn('transition-transform duration-150', expanded && 'rotate-90')}
@@ -226,6 +314,23 @@ function ThinkingBlock({ blockId }: { blockId: string }) {
       ) : null}
     </div>
   )
+}
+
+/**
+ * What a finished thinking row says.
+ *
+ * "thinking" in the past tense with no number was the weakest possible version of
+ * this: the row survives the turn, so it may as well report the one fact it
+ * uniquely knows. A long pause before an answer stops looking like a stall once
+ * it's labelled with its own cost.
+ *
+ * Replayed history has no duration (see the `thinking` item type) and falls back
+ * to the bare word rather than inventing a plausible-looking number.
+ */
+function thoughtLabel(thoughtForMs: number | undefined): string {
+  if (thoughtForMs === undefined) return 'Thought'
+  // Never "0s": sub-second thinking still happened, and a zero reads as a bug.
+  return `Thought for ${formatElapsed(Math.max(1, Math.round(thoughtForMs / 1000)))}`
 }
 
 /**

@@ -15,7 +15,16 @@ import type { PermissionMode, SessionStatus } from '@shared/ipc'
  */
 export type TranscriptItem =
   | { kind: 'text'; id: string; blockId: string }
-  | { kind: 'thinking'; id: string; blockId: string }
+  /**
+   * Extended thinking. The row outlives the streaming, so it carries its own
+   * clock: `startedAt` is stamped when the first delta creates the item and
+   * `thoughtForMs` when the block ends, which is what lets a finished row say
+   * "Thought for 12s" instead of decaying to a bare word.
+   *
+   * Both are absent on replayed history — a resumed transcript arrives all at
+   * once, so its wall-clock would measure the replay, not the thinking.
+   */
+  | { kind: 'thinking'; id: string; blockId: string; startedAt?: number; thoughtForMs?: number }
   | { kind: 'user'; id: string; text: string; turnId?: string }
   /**
    * A failure, in the place it happened.
