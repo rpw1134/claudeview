@@ -58,6 +58,7 @@ function emptyTab(id: string, options: Partial<CreateSessionRequest> & { title?:
     status: 'starting',
     permissionMode: options.permissionMode ?? 'auto',
     tools: [],
+    slashCommands: [],
     lanes: { [MAIN_LANE]: { id: MAIN_LANE, closed: false, items: [] } },
     laneOrder: [MAIN_LANE],
     activeLaneId: MAIN_LANE,
@@ -125,6 +126,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
   let model = tab.model
   let permissionMode = tab.permissionMode
   let tools = tab.tools
+  let slashCommands = tab.slashCommands
+  let instantTurn = tab.instantTurn
   let usage = tab.usage
   let lastError = tab.lastError
   let title = tab.title
@@ -190,7 +193,13 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
 
         // Replayed transcript: paint it immediately. Running an hour of prior
         // conversation through the typewriter would be absurd.
-        if (event.historical) {
+        //
+        // A slash command's turn takes the same path, for a related reason: its
+        // output is a *report* — a usage table, a config dump — not prose being
+        // composed. The typewriter exists to make generation legible as it
+        // happens; on a table it is pure theatre, and a slow one, since you
+        // can't read the thing until it stops moving.
+        if (event.historical || instantTurn) {
           streamBuffers.finish(bufferKey)
           streamBuffers.revealAll(bufferKey)
         }
@@ -221,6 +230,13 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         break
 
       case 'user-message': {
+        // Decided before the echo check, so it holds whichever copy arrives first:
+        // the renderer's optimistic one, or main's for a turn the renderer didn't
+        // start (an `initialPrompt`). Setting it twice for the same turn is a
+        // no-op; what matters is that a *non*-slash turn resets it, so the turn
+        // after `/usage` streams normally even if its `result` was missed.
+        if (event.agent.id === MAIN_LANE) instantTurn = event.text.startsWith('/')
+
         // Already on screen from the optimistic echo. Dropping main's copy is what
         // lets the message appear instantly without ever rendering twice.
         if (event.turnId && echoedTurnIds.has(event.turnId)) break
@@ -312,6 +328,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         model = event.model
         permissionMode = event.permissionMode
         tools = event.tools
+        slashCommands = event.slashCommands
         break
 
       case 'session-attached':
@@ -342,6 +359,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
         }
         // What the tail's settled footer shows once the activity line resolves.
         lastTurn = { ok: event.ok, durationMs: event.durationMs }
+        // The command turn is over; the next one types itself out like any other.
+        instantTurn = false
         break
 
       case 'error': {
@@ -373,6 +392,8 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     model,
     permissionMode,
     tools,
+    slashCommands,
+    instantTurn,
     usage,
     lastError,
     lastTurn,

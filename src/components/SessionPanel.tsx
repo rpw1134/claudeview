@@ -133,6 +133,7 @@ export function SessionPanel({
         autoFocusToken={autoFocusToken}
         draft={tab.draft}
         draftAttachments={tab.draftAttachments}
+        slashCommands={tab.slashCommands}
         onDraftChange={onDraftChange}
         onSend={onSend}
         onInterrupt={onInterrupt}

@@ -78,6 +78,14 @@ export type Tab = {
   model?: string
   permissionMode: PermissionMode
   tools: string[]
+  /** Slash commands the session accepts, from `session-init`. Drives completions. */
+  slashCommands: string[]
+  /**
+   * The turn in flight was started by a slash command, so its output is revealed
+   * whole instead of typed out. Transient like `lastTurn`: set when the command is
+   * sent, cleared on `result`.
+   */
+  instantTurn?: boolean
   lanes: Record<string, Lane>
   /** Lane render order; `'main'` is always first. */
   laneOrder: string[]

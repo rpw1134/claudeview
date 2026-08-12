@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Folder, FileText, Paperclip, Square, X } from 'lucide-react'
 import { PermissionMenu } from './PermissionMenu'
+import { SlashCommandPopup } from './SlashCommandPopup'
 import { isBusyStatus } from './ActivityIndicator'
 import type { PermissionMode, SessionStatus } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { basename, composeMessage, mergeAttachments } from '@/lib/attachments'
+import { useSlashCompletion } from '@/lib/useSlashCompletion'
 import { cn } from '@/lib/utils'
 
 const MAX_HEIGHT_PX = 120
@@ -48,6 +50,7 @@ export function PanelComposer({
   autoFocusToken,
   draft,
   draftAttachments,
+  slashCommands,
   onDraftChange,
   onSend,
   onInterrupt,
@@ -56,6 +59,12 @@ export function PanelComposer({
   status: SessionStatus
   permissionMode: PermissionMode
   panelFocused: boolean
+  /**
+   * Commands this session accepts, from `session-init`. Absent for a composer with
+   * no session behind it (the pending panel), which is exactly the case where
+   * completions would be a menu of guesses.
+   */
+  slashCommands?: string[]
   /**
    * The unsent message, owned by the tab. Not local state: this component
    * unmounts whenever the layout tree changes shape, which used to throw away
@@ -92,6 +101,27 @@ export function PanelComposer({
   // Drag events fire for every child element crossing the pointer, so a plain
   // enter/leave pair flickers. Counting depth is the standard fix.
   const dragDepth = useRef(0)
+
+  const slash = useSlashCompletion({
+    draft: value,
+    commands: slashCommands ?? [],
+    textareaRef,
+    setDraft: setValue,
+  })
+
+  /*
+   * Colour the whole field while the draft is a bare command token.
+   *
+   * The alternative — a mirror div behind a transparent textarea — is the only way
+   * to tint *part* of the text, and it is a standing bug factory: the mirror has to
+   * reproduce the textarea's font, padding, wrapping and scroll offset exactly, and
+   * any drift shows up as visibly doubled or offset glyphs while you type. This
+   * says the same thing ("that's a command") with one class and nothing to
+   * desynchronise, and it stops being true at precisely the moment it would start
+   * lying — the first space, after which the line is a command *plus arguments*
+   * and colouring the arguments would be wrong anyway.
+   */
+  const isBareCommand = /^\/\S*$/.test(value)
 
   const isBusy = isBusyStatus(status)
   const disabled = status === 'closed' || status === 'error'
@@ -160,6 +190,13 @@ export function PanelComposer({
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // First refusal to the completion popup: while it's open, Enter and Tab
+      // belong to it. Every other time — including the frame after Escape closes
+      // it — Enter still sends, which is the contract this ordering guarantees.
+      if (!event.nativeEvent.isComposing && slash.onKeyDown(event)) {
+        event.preventDefault()
+        return
+      }
       if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
         event.preventDefault()
         submit()
@@ -170,7 +207,7 @@ export function PanelComposer({
         onInterrupt()
       }
     },
-    [submit, isBusy, onInterrupt],
+    [slash, submit, isBusy, onInterrupt],
   )
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
@@ -198,7 +235,9 @@ export function PanelComposer({
           }}
           onDrop={onDrop}
           className={cn(
-            'hand-2 transition-colors duration-150',
+            // `relative` anchors the completion popup to the input's own edges: it
+            // is a menu *of* this field, and any other width reads as unrelated.
+            'hand-2 relative transition-colors duration-150',
             // No border at rest. The panel's header icon already says which one is
             // live; a second outline per panel is what made eight of these loud.
             panelFocused ? 'bg-raised' : 'bg-raised/60',
@@ -207,6 +246,17 @@ export function PanelComposer({
             disabled && 'opacity-50',
           )}
         >
+          {slash.open ? (
+            <SlashCommandPopup
+              commands={slash.matches}
+              selected={slash.selected}
+              onSelect={slash.accept}
+              onHover={slash.setSelected}
+              listId={slash.listId}
+              optionId={slash.optionId}
+            />
+          ) : null}
+
           {attachments.length > 0 ? (
             <AttachmentChips
               paths={attachments}
@@ -229,17 +279,31 @@ export function PanelComposer({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => {
+              setValue(event.target.value)
+              slash.syncCaret()
+            }}
+            // Fires on every caret move, which is what decides whether the caret is
+            // still inside the command token — arrowing out of it closes the popup.
+            onSelect={slash.syncCaret}
             onKeyDown={onKeyDown}
             disabled={disabled}
             rows={1}
+            role="combobox"
+            aria-expanded={slash.open}
+            aria-autocomplete="list"
+            aria-controls={slash.open ? slash.listId : undefined}
+            aria-activedescendant={slash.open ? slash.optionId(slash.selected) : undefined}
             placeholder={
               disabled ? 'Session ended' : isBusy ? 'Add to the pile…' : 'Write something…'
             }
             aria-label="Message"
             style={{ minHeight: MIN_HEIGHT_PX }}
-            className="w-full resize-none border-none bg-transparent px-3 pt-2.5 text-sm
-                       leading-relaxed text-text outline-none placeholder:text-text-faint"
+            className={cn(
+              `w-full resize-none border-none bg-transparent px-3 pt-2.5 text-sm
+               leading-relaxed outline-none placeholder:text-text-faint`,
+              isBareCommand ? 'text-accent' : 'text-text',
+            )}
           />
 
           <div className="flex items-center justify-end gap-1 px-2 pb-1.5">

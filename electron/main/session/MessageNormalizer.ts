@@ -189,6 +189,7 @@ export class MessageNormalizer {
         permissionMode: message.permissionMode as PermissionMode,
         tools: message.tools ?? [],
         agents: message.agents ?? [],
+        slashCommands: message.slash_commands ?? [],
       },
       // Deliberately no status. `system/init` reports *identity*; it says nothing
       // about whether a turn is running. It used to emit `'ready'`, and because

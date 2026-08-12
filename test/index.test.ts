@@ -15,6 +15,7 @@ import './normalizer.test'
 import './lineDiff.test'
 import './markdownSyntax.test'
 import './toolGroups.test'
+import './slashCommands.test'
 import { report } from './harness'
 
 report()
