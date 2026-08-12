@@ -56,8 +56,8 @@ export function WorkspaceBar({
   panelCount: number
   surface: Surface
   onSurface: (surface: Surface) => void
-  onAddSession: (direction: SplitDirection) => void
-  onAddTerminal: (direction: SplitDirection) => void
+  onAddSession: (direction?: SplitDirection) => void
+  onAddTerminal: (direction?: SplitDirection) => void
   onBalance: () => void
   onOpenSettings: () => void
 }) {
@@ -115,7 +115,7 @@ export function WorkspaceBar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onAddSession('row')}
+            onClick={() => onAddSession()}
             disabled={atCapacity}
             aria-label="New session panel"
             title="New session — ⌥T"
@@ -125,7 +125,7 @@ export function WorkspaceBar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onAddTerminal('row')}
+            onClick={() => onAddTerminal()}
             disabled={atCapacity}
             aria-label="New terminal panel"
             title="New terminal — ⌥C"

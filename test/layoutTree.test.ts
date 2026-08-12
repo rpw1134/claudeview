@@ -9,7 +9,7 @@
  * Run with `npm test`.
  */
 import {
-  balance, collectPanelIds, dropPositionFor, insertPanel, leaf,
+  balance, collectPanelIds, dropPositionFor, gridLayout, insertPanel, leaf,
   movePanel, removePanel, setRatio, swapPanels, type LayoutNode,
 } from '@/lib/layoutTree'
 
@@ -98,3 +98,41 @@ check('8 panels present', collectPanelIds(big).length === 8, String(collectPanel
 check('8-panel layout fills viewport', Math.abs(sum(areas(big)) - 1) < 1e-9, String(sum(areas(big))))
 for (let i = 0; i < 8; i++) big = removePanel(big, `p${i}`)
 check('all removed cleanly', big === null)
+
+/* --- grid layout: at most 4 across, at most 2 rows --- */
+import { section } from './harness'
+section('gridLayout')
+
+/** Leaf count per row: a single row is the tree itself; two rows sit under one column split. */
+function rowCounts(node: LayoutNode | null): number[] {
+  if (!node) return []
+  if (node.type === 'split' && node.direction === 'column') {
+    return [collectPanelIds(node.children[0]).length, collectPanelIds(node.children[1]).length]
+  }
+  return [collectPanelIds(node).length]
+}
+
+const ids = (n: number) => Array.from({ length: n }, (_, i) => `g${i}`)
+
+check('empty -> null', gridLayout([]) === null)
+for (const [n, expected] of [
+  [1, [1]], [2, [2]], [3, [3]], [4, [4]],
+  [5, [3, 2]], [6, [3, 3]], [7, [4, 3]], [8, [4, 4]],
+] as const) {
+  const tree = gridLayout(ids(n))
+  check(
+    `${n} panels -> rows ${JSON.stringify(expected)}`,
+    JSON.stringify(rowCounts(tree)) === JSON.stringify(expected),
+    JSON.stringify(rowCounts(tree)),
+  )
+  check(`${n} panels keep order`, collectPanelIds(tree).join(',') === ids(n).join(','))
+  check(`${n} panels fill viewport`, Math.abs(sum(areas(tree)) - 1) < 1e-9, String(sum(areas(tree))))
+}
+
+// Even shares within a row: every panel in a 3-wide row gets exactly a third.
+{
+  const tree = gridLayout(ids(6))
+  const a = areas(tree)
+  const even = Object.values(a).every((v) => Math.abs(v - 1 / 6) < 1e-9)
+  check('6 panels -> six equal sixths', even, JSON.stringify(a))
+}

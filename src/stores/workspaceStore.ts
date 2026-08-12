@@ -1,9 +1,11 @@
 import { create } from 'zustand'
+import type { PermissionMode } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { useSessionStore } from './sessionStore'
 import {
   balance,
   collectPanelIds,
+  gridLayout,
   insertPanel,
   leaf,
   movePanel,
@@ -102,7 +104,12 @@ type WorkspaceState = {
   /** Change a pre-start panel's proposed directory, before anything is spawned. */
   setPanelPendingCwd: (panelId: string, cwd?: string) => void
   /** Commit a pre-start panel: spawn its session in the chosen directory. */
-  startPanelSession: (panelId: string, cwd?: string) => Promise<void>
+  startPanelSession: (
+    panelId: string,
+    cwd?: string,
+    initialPrompt?: string,
+    permissionMode?: PermissionMode,
+  ) => Promise<void>
   closePanel: (panelId: string) => Promise<void>
   renamePanel: (panelId: string, title: string) => void
 
@@ -190,19 +197,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       pending: deferStart ? { cwd } : undefined,
     }
 
-    // Split the focused panel, along its longer axis unless told otherwise, so a
-    // new panel takes space from where the user is looking rather than from an
-    // arbitrary corner. Splitting the long way keeps both halves usable.
+    /*
+     * Two placement modes. An explicit `direction` is a SPLIT — the user said
+     * "beside/below the focused panel", so the tree divides that leaf. A plain
+     * spawn (⌥T, the toolbar add buttons) follows the grid instead: at most 4
+     * across, at most 2 rows, existing panels keeping their visual order and
+     * the newcomer taking the next cell. Splitting the focused panel on every
+     * spawn was how eight adds produced a staircase of slivers.
+     */
     const target = state.focusedPanelId ?? state.panels[state.panels.length - 1]?.id
-    const direction: SplitDirection = options.direction ?? 'row'
-    const position = direction === 'row' ? 'right' : 'bottom'
+    const layout = options.direction
+      ? state.layout && target
+        ? insertPanel(
+            state.layout,
+            target,
+            panelId,
+            options.direction === 'row' ? 'right' : 'bottom',
+          )
+        : leaf(panelId)
+      : gridLayout([...collectPanelIds(state.layout), panelId])
 
     setState({
       panels: [...state.panels, panel],
-      layout:
-        state.layout && target
-          ? insertPanel(state.layout, target, panelId, position)
-          : leaf(panelId),
+      layout: layout ?? leaf(panelId),
       focusedPanelId: panelId,
     })
 
@@ -224,7 +241,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       ),
     })),
 
-  startPanelSession: async (panelId, cwd) => {
+  startPanelSession: async (panelId, cwd, initialPrompt, permissionMode) => {
     const panel = getState().panels.find((entry) => entry.id === panelId)
     // Only a pending panel can be started, so a double submit (Enter held, or a
     // click landing after the keypress) can't spawn a second subprocess against
@@ -237,7 +254,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
       ),
     }))
 
-    await useSessionStore.getState().openTabWithId(panel.refId, { cwd })
+    // `initialPrompt` lets the first message BE the start action: type into a
+    // pre-start panel's composer and the session spawns already carrying it.
+    // `permissionMode` carries the choice made on the pre-start composer's menu —
+    // without it that menu was display-only, silently discarding a mode picked
+    // before the first message.
+    await useSessionStore
+      .getState()
+      .openTabWithId(panel.refId, { cwd, initialPrompt, permissionMode })
   },
 
   closePanel: async (panelId) => {

@@ -59,6 +59,57 @@ export function collectPanelIds(node: LayoutNode | null): string[] {
 }
 
 /**
+ * A balanced run of leaves along one axis: nested binary splits whose ratios
+ * work out to an even 1/k share for every leaf.
+ */
+function evenRun(panelIds: string[], direction: SplitDirection): LayoutNode {
+  if (panelIds.length === 1) return leaf(panelIds[0]!)
+  const mid = Math.ceil(panelIds.length / 2)
+  return {
+    id: newId(),
+    type: 'split',
+    direction,
+    // The binary split's ratio is the left side's share of the whole run, so a
+    // 3-leaf run splits 2/3 then 1/2 and every leaf ends up at exactly 1/3.
+    ratio: mid / panelIds.length,
+    children: [
+      evenRun(panelIds.slice(0, mid), direction),
+      evenRun(panelIds.slice(mid), direction),
+    ],
+  }
+}
+
+/**
+ * The default arrangement for N panels: a grid of at most 4 across and 2 down.
+ *
+ * Spawning used to split the focused panel, so eight ⌥T presses produced a
+ * lopsided staircase of ever-thinner slivers. Filling follows a fixed shape
+ * instead: one row up to four panels, then two rows splitting the count as
+ * evenly as possible (5 → 3+2 … 8 → 4+4). Order is the caller's — visual order
+ * with the newcomer appended — so existing panels keep their positions and the
+ * new one lands in the next open cell. Explicit splits (⌥A/⌥S, drops, divider
+ * drags) still produce arbitrary trees; this governs plain spawns only, which
+ * does mean a spawn re-evens ratios a divider drag had customized — the price
+ * of the grid always being a grid.
+ */
+export function gridLayout(panelIds: string[]): LayoutNode | null {
+  if (panelIds.length === 0) return null
+  if (panelIds.length <= 4) return evenRun(panelIds, 'row')
+
+  const top = Math.ceil(panelIds.length / 2)
+  return {
+    id: newId(),
+    type: 'split',
+    direction: 'column',
+    ratio: 0.5,
+    children: [
+      evenRun(panelIds.slice(0, top), 'row'),
+      evenRun(panelIds.slice(top), 'row'),
+    ],
+  }
+}
+
+/**
  * Insert `panelId` next to `targetPanelId`.
  *
  * The target leaf becomes a split containing itself and the new panel, ordered so

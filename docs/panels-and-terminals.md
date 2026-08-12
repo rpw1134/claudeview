@@ -57,6 +57,13 @@ Every split divides 100% of its parent, so the layout **always fills the viewpor
 exactly** — no gaps, no overlap, whatever you drag it into. Presets could only offer
 the shapes someone predicted in advance.
 
+**Spawning follows a grid; splitting stays manual.** A plain spawn (⌥T, ⌥C, the
+toolbar add buttons) fills a fixed shape — at most 4 panels across, at most 2 rows,
+existing panels keeping their visual order (5 panels arrange 3+2, 8 arrange 4+4).
+Explicit splits (⌥A/⌥S, the split buttons, drops, divider drags) still produce
+arbitrary trees; a later spawn re-evens the grid, which is the price of the grid
+always being a grid.
+
 Every operation (`insertPanel`, `removePanel`, `movePanel`, `swapPanels`,
 `setRatio`) is **pure** and returns a new tree. Layout edits happen several times a
 second during a drag, so in-place mutation would make React miss updates and make an
