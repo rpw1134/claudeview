@@ -165,6 +165,8 @@ export function registerIpc(
   )
   handle('config:hooks:get', ({ projectPath }) => config.getHooks(projectPath))
   handle('config:hooks:set', ({ projectPath, hooks }) => config.setHooks(projectPath, hooks))
+  handle('trust:check', ({ dir }) => config.isDirTrusted(dir))
+  handle('trust:grant', ({ dir }) => config.grantDirTrust(dir))
 
   // Review set. `review:file` reads only paths already in the set — the tracker
   // enforces that, so this is not a general file-read channel.
@@ -211,6 +213,8 @@ export function unregisterIpc(): void {
     'review:file',
     'review:dismiss',
     'review:dismiss-all',
+    'trust:check',
+    'trust:grant',
   ]
   for (const channel of channels) ipcMain.removeHandler(channel)
 }

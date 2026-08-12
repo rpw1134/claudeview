@@ -179,7 +179,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((setState, getState) =
      * A session states nothing until it has already acted, which is why only
      * sessions are worth a form.
      */
-    const deferStart = kind === 'session' && !options.start && !options.resume
+    /*
+     * A session defers its spawn when the user hasn't aimed it yet — and also
+     * when the aimed directory isn't trusted. The landing page passes
+     * `start: true` because its directory is explicitly chosen, but chosen is
+     * not approved: an untrusted folder routes through the pending panel,
+     * whose trust gate is the only path to a running prompt. Resumes are
+     * exempt — the folder was approved when the session first ran there.
+     */
+    let deferStart = kind === 'session' && !options.start && !options.resume
+    if (kind === 'session' && options.start && !options.resume && cwd) {
+      const trusted = await api['trust:check']({ dir: cwd }).catch(() => true)
+      if (!trusted) deferStart = true
+    }
 
     const panel: Panel = {
       id: panelId,

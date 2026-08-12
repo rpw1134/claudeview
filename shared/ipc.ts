@@ -135,6 +135,15 @@ export type StreamEvent =
       permissionMode: PermissionMode
       tools: string[]
       agents: string[]
+      /**
+       * Slash commands this session accepts (`usage`, `compact`, a skill name…),
+       * without the leading slash — exactly as the CLI reports them.
+       *
+       * Carried on init rather than fetched on demand because the set is fixed for
+       * the life of a session and small: the composer needs it the instant you
+       * type `/`, and a round trip at that moment would show an empty menu first.
+       */
+      slashCommands: string[]
     }
   /**
    * Emitted as soon as the subprocess is up, before the CLI has reported anything.
@@ -303,6 +312,14 @@ export type IpcCalls = {
   'config:skills:delete-file': [{ projectPath: string; name: string; file: string }, void]
   'config:hooks:get': [{ projectPath: string }, HooksConfig]
   'config:hooks:set': [{ projectPath: string; hooks: HooksConfig }, void]
+
+  /**
+   * Folder trust, backed by the CLI's own record in ~/.claude.json. The SDK
+   * never shows the CLI's trust dialog, so the app gates session starts on
+   * this itself; granting writes the same field the CLI writes.
+   */
+  'trust:check': [{ dir: string }, boolean]
+  'trust:grant': [{ dir: string }, void]
 
   /**
    * The review set: files agents have changed since you last dismissed them.

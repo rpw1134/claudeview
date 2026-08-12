@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { ShieldAlert } from 'lucide-react'
 import type { PermissionMode } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import { PanelComposer } from './PanelComposer'
+import { Button } from './ui/Button'
 import { shortenPath } from '@/lib/utils'
 
 /**
@@ -110,44 +112,106 @@ export function PendingSessionPanel({
     void startSession(panelId, cwd, text, permissionMode)
   }
 
+  /*
+   * Folder trust, checked per proposed directory. `null` while the answer is in
+   * flight — the composer stays enabled during that beat, because flashing it
+   * disabled for every already-trusted folder (the overwhelming case) would
+   * punish the common path to guard the rare one; an untrusted answer disables
+   * it the moment it lands.
+   */
+  const [trusted, setTrusted] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!cwd) return
+    let cancelled = false
+    setTrusted(null)
+    api['trust:check']({ dir: cwd })
+      .then((ok) => {
+        if (!cancelled) setTrusted(ok)
+      })
+      .catch(() => {
+        if (!cancelled) setTrusted(true) // An unreadable trust store must not brick starting.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [cwd])
+
+  const approve = async () => {
+    if (!cwd) return
+    await api['trust:grant']({ dir: cwd })
+    setTrusted(true)
+  }
+
+  const projectName = cwd?.split('/').filter(Boolean).pop()
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="pending-session-panel">
-      {/* Stands in for the transcript, and holds the same gutters, so the line
+      {/* Stands in for the transcript, and holds the same gutters, so the block
           it centres sits on the reading area rather than in a band of its own. */}
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4 @[30rem]:px-7 @[48rem]:px-10">
-        <p className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 text-center text-sm text-text-faint">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 @[30rem]:px-7 @[48rem]:px-10">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center text-sm text-text-faint">
           <span>
-            Starting in{' '}
+            Session will start in{' '}
             <span className="font-mono text-text-muted" title={cwd}>
-              {cwd ? shortenPath(cwd, home) : '…'}
+              {projectName ?? '…'}
             </span>
           </span>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => void pickDirectory()}
             data-testid="pending-change-directory"
-            className="underline decoration-line underline-offset-4 transition-colors
-                       hover:text-accent hover:decoration-accent"
           >
             Change
-          </button>
-        </p>
+          </Button>
+        </div>
+        {cwd ? (
+          <p className="max-w-full truncate font-mono text-xs text-text-faint" title={cwd}>
+            {shortenPath(cwd, home)}
+          </p>
+        ) : null}
+
       </div>
 
-      <PanelComposer
-        // 'idle' rather than 'starting': nothing is in flight, and the composer
-        // reads this to decide whether it's typeable at all.
-        status="idle"
-        permissionMode={permissionMode}
-        panelFocused={panelFocused}
-        autoFocusToken={autoFocusToken}
-        draft={draft}
-        draftAttachments={attachments}
-        onDraftChange={onDraftChange}
-        onSend={onSend}
-        onInterrupt={() => {}}
-        onPermissionModeChange={setPermissionMode}
-      />
+      {trusted === false ? (
+        /*
+         * The approval step the CLI shows and the SDK skips. It REPLACES the
+         * composer rather than disabling it: a disabled composer needs
+         * explanatory placeholder copy the composer doesn't have for this
+         * case, and consent shouldn't share a surface with the thing it
+         * gates. One sentence, one action, sitting exactly where typing will
+         * happen once it's given — so there is no path to a prompt running in
+         * a folder nobody approved.
+         */
+        <div
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-2
+                     px-4 pb-4 pt-1 text-sm text-text-muted"
+          data-testid="pending-trust-gate"
+        >
+          <span className="flex items-center gap-1.5">
+            <ShieldAlert size={14} className="shrink-0 text-warning" aria-hidden />
+            Claude hasn’t used this folder before.
+          </span>
+          <Button variant="primary" size="sm" onClick={() => void approve()}>
+            Trust this folder
+          </Button>
+        </div>
+      ) : (
+        <PanelComposer
+          // 'idle' rather than 'starting': nothing is in flight, and the composer
+          // reads this to decide whether it's typeable at all.
+          status="idle"
+          permissionMode={permissionMode}
+          panelFocused={panelFocused}
+          autoFocusToken={autoFocusToken}
+          draft={draft}
+          draftAttachments={attachments}
+          onDraftChange={onDraftChange}
+          onSend={onSend}
+          onInterrupt={() => {}}
+          onPermissionModeChange={setPermissionMode}
+        />
+      )}
     </div>
   )
 }

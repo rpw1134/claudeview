@@ -109,6 +109,55 @@ export async function listProjects(): Promise<ConfigProject[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Directory trust
+// ---------------------------------------------------------------------------
+
+/**
+ * The CLI's own folder-trust record: `projects[dir].hasTrustDialogAccepted` in
+ * `~/.claude.json`, written when a user answers its "do you trust this folder"
+ * dialog. The SDK never shows that dialog — programmatic sessions start
+ * anywhere — so the app enforces the same record itself: an untrusted
+ * directory requires an explicit in-app approval before a session may spawn,
+ * and approving writes the same field the CLI writes. One trust store, two
+ * front doors.
+ */
+export async function isDirTrusted(dir: string): Promise<boolean> {
+  const raw = await readIfExists(path.join(home(), '.claude.json'))
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw) as {
+      projects?: Record<string, { hasTrustDialogAccepted?: boolean }>
+    }
+    return parsed.projects?.[path.resolve(resolveHome(dir))]?.hasTrustDialogAccepted === true
+  } catch {
+    return false
+  }
+}
+
+export async function grantDirTrust(dir: string): Promise<void> {
+  const target = path.join(home(), '.claude.json')
+  const raw = await readIfExists(target)
+
+  let config: Record<string, unknown> = {}
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed === 'object' && parsed !== null) config = parsed
+    } catch {
+      // A corrupt ~/.claude.json is the CLI's problem to surface; refusing to
+      // grant is safer than overwriting whatever is there.
+      throw new Error('~/.claude.json contains invalid JSON — fix it before granting trust.')
+    }
+  }
+
+  const resolved = path.resolve(resolveHome(dir))
+  const projects = (config.projects ?? {}) as Record<string, Record<string, unknown>>
+  projects[resolved] = { ...projects[resolved], hasTrustDialogAccepted: true }
+  config.projects = projects
+  await writeEnsuringDir(target, JSON.stringify(config, null, 2) + '\n')
+}
+
+// ---------------------------------------------------------------------------
 // Agents
 // ---------------------------------------------------------------------------
 

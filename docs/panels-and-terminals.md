@@ -57,6 +57,22 @@ Every split divides 100% of its parent, so the layout **always fills the viewpor
 exactly** — no gaps, no overlap, whatever you drag it into. Presets could only offer
 the shapes someone predicted in advance.
 
+## Starting a session
+
+A session panel opened by `⌥T`, the toolbar, or a split spawns **nothing** until
+aimed: it renders the normal chat shell with a centred "Session will start in
+`project` — Change" line, and typing the first message is the start — the session
+spawns in the chosen directory carrying that message (and any permission mode
+picked) with it. The landing page and resume rows start immediately, since their
+directory is already known.
+
+**Folder trust is enforced in-app.** The CLI asks "do you trust this folder?" on
+first use; the SDK never shows that dialog, so Stryde gates on the same record
+itself (`hasTrustDialogAccepted` in `~/.claude.json`). A directory with no trust
+record replaces the composer with a one-line approval — no path to a running
+prompt exists in a folder nobody approved — and approving writes the CLI's own
+field, so trust granted here counts there and vice versa.
+
 **Spawning follows a grid; splitting stays manual.** A plain spawn (⌥T, ⌥C, the
 toolbar add buttons) fills a fixed shape — at most 4 panels across, at most 2 rows,
 existing panels keeping their visual order (5 panels arrange 3+2, 8 arrange 4+4).
