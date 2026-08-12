@@ -129,6 +129,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
   let lastError = tab.lastError
   let title = tab.title
   let lastTurn = tab.lastTurn
+  let activeLaneId = tab.activeLaneId
 
   const laneFor = (laneId: string): Lane => {
     let lane = lanes[laneId]
@@ -288,6 +289,21 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
       case 'agent-end': {
         const lane = laneFor(event.agent.id)
         lanes[lane.id] = { ...lane, closed: true }
+        /*
+         * A finished subagent stops being somewhere you can be.
+         *
+         * The indicator only lists *running* lanes, so a lane that closes while
+         * you're reading it would otherwise strand the panel on a view with no
+         * entry left pointing at it. Done here rather than in a component
+         * because there are several paths into a lane view (the indicator, a
+         * Task row's Open) and only one place all of them have to pass through
+         * on the way out: this reducer. A render-time correction would also fire
+         * after the dead view had already painted.
+         *
+         * Re-opening a finished lane from its Task row still works — that's a
+         * `setActiveLane` after the close, and nothing re-closes it.
+         */
+        if (activeLaneId === lane.id) activeLaneId = MAIN_LANE
         break
       }
 
@@ -362,6 +378,7 @@ function reduceTab(tab: Tab, events: StreamEvent[]): Tab {
     lastTurn,
     lanes,
     laneOrder,
+    activeLaneId,
     seenBlockIds,
     echoedTurnIds,
   }

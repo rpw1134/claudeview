@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'
-import { LaneTabs } from './LaneTabs'
+import { LaneViewBar, SubagentIndicator } from './SubagentLanes'
 import { Transcript } from './Transcript'
 import { PanelComposer } from './PanelComposer'
 import { Button } from './ui/Button'
@@ -48,6 +48,7 @@ export function SessionPanel({
     (itemId: string, text: string) => void retry(tabId, itemId, text),
     [retry, tabId],
   )
+  const onBackToMain = useCallback(() => setActiveLane(tabId, 'main'), [setActiveLane, tabId])
   const onSend = useCallback((text: string) => void send(tabId, text), [send, tabId])
   const onInterrupt = useCallback(() => void interrupt(tabId), [interrupt, tabId])
   const onDraftChange = useCallback(
@@ -64,7 +65,18 @@ export function SessionPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <LaneTabs tab={tab} onSelect={onOpenLane} />
+      {/*
+        One row, never two. On main it's the indicator of what's running
+        underneath; inside a lane it's the way back out. Showing both would put
+        two navigation affordances in a 24px strip that disagree about where you
+        are — and a lane view is a *replacement*, not a nested pane, so the only
+        move it owes is up.
+      */}
+      {lane && lane.id !== 'main' ? (
+        <LaneViewBar lane={lane} onBack={onBackToMain} />
+      ) : (
+        <SubagentIndicator tab={tab} onSelect={onOpenLane} />
+      )}
 
       {lane ? (
         <Transcript

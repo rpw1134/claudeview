@@ -3,9 +3,10 @@ import { MessagesSquare, SquareTerminal, X } from 'lucide-react'
 import type { Panel } from '@/stores/workspaceStore'
 import { selectPanelNumber, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useZoomStore } from '@/stores/zoomStore'
 import { TerminalPanel } from './TerminalPanel'
 import { SessionPanel } from './SessionPanel'
-import { PanelStartForm } from './PanelStartForm'
+import { PendingSessionPanel } from './PendingSessionPanel'
 import { ActivityIndicator, isBusyStatus } from './ActivityIndicator'
 import { Button } from './ui/Button'
 import { cn, compactTokens, shortenPath } from '@/lib/utils'
@@ -62,11 +63,16 @@ export const PanelFrame = memo(function PanelFrame({
   // Visual order, same numbering as the ⌥1–⌥8 shortcuts — recomputed from the
   // layout tree, so a panel dragged to the front becomes #1 without a rename.
   const number = useWorkspaceStore(selectPanelNumber(panel.id))
+  // ⌘+ / ⌘- / ⌘0, per panel. Applied below to the content only.
+  const zoom = useZoomStore((state) => state.zoom[panel.id] ?? 1)
 
   const title = tab?.title ?? panel.title
   // The session's own cwd wins: the CLI reports where it actually attached, which
   // is the truth a resumed session carries and the panel record only predicted.
-  const cwd = tab?.cwd ?? panel.cwd
+  // A pre-start panel falls back to its *proposed* directory so the header tells
+  // the same story before and after the session exists — the path doesn't appear
+  // out of nowhere the moment you press Enter.
+  const cwd = tab?.cwd ?? panel.cwd ?? panel.pending?.cwd
   const Icon = panel.kind === 'terminal' ? SquareTerminal : MessagesSquare
   const isBusy = tab ? isBusyStatus(tab.status) : false
 
@@ -176,11 +182,29 @@ export const PanelFrame = memo(function PanelFrame({
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-bg">
+      {/*
+        Zoom scales the CONTENT, not the panel.
+
+        It used to wrap the whole frame, which scaled the header along with the
+        transcript: at 1.6 a panel's chrome — title, path, close button — grew by
+        60% and ate the reading area you had just asked for more of, and eight
+        panels at different factors had eight different header heights, so the
+        row of headers stopped being a straight line across the window. Zoom is a
+        reading posture for the document; the chrome is a fixed instrument panel.
+
+        CSS `zoom` rather than `transform: scale()` because it participates in
+        layout — the content reflows to the panel's real width at the new size
+        instead of being drawn large and clipped. It isn't in React's CSS types,
+        hence the cast.
+      */}
+      <div
+        className="min-h-0 flex-1 overflow-hidden bg-bg"
+        style={zoom === 1 ? undefined : ({ zoom } as React.CSSProperties)}
+      >
         {panel.kind === 'session' && panel.pending ? (
-          // No tab exists yet, so there is nothing for SessionPanel to render:
-          // the panel is a question, not a conversation.
-          <PanelStartForm
+          // No tab exists yet, so the transcript is empty — but the shell is the
+          // same one the session will use, and the first message starts it.
+          <PendingSessionPanel
             panelId={panel.id}
             cwd={panel.pending.cwd}
             home={home}
